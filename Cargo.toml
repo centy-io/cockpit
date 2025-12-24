@@ -5,6 +5,7 @@ edition = "2021"
 description = "Terminal multiplexer library for Ratatui applications"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/centy-io/cockpit"
+readme = "README.md"
 keywords = ["tui", "terminal", "multiplexer", "ratatui", "pty"]
 categories = ["command-line-interface"]
 

@@ -1,0 +1,41 @@
+[package]
+name = "cockpit"
+version = "0.1.0"
+edition = "2021"
+description = "Terminal multiplexer library for Ratatui applications"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/centy-io/cockpit"
+keywords = ["tui", "terminal", "multiplexer", "ratatui", "pty"]
+categories = ["command-line-interface"]
+
+[dependencies]
+# TUI framework
+ratatui = "0.29"
+
+# PTY management (cross-platform, from wezterm)
+portable-pty = "0.8"
+
+# Terminal emulation state machine
+vt100 = "0.15"
+
+# Async runtime
+tokio = { version = "1", features = ["sync", "rt-multi-thread", "macros"] }
+
+# Error handling
+thiserror = "1"
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+
+# Terminal backend
+crossterm = { version = "0.28", features = ["event-stream"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn" }

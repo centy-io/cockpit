@@ -98,7 +98,9 @@ impl Layout {
     pub fn contains(&self, pane_id: PaneId) -> bool {
         match self {
             Self::Single(id) => *id == pane_id,
-            Self::Split { first, second, .. } => first.contains(pane_id) || second.contains(pane_id),
+            Self::Split { first, second, .. } => {
+                first.contains(pane_id) || second.contains(pane_id)
+            }
         }
     }
 }

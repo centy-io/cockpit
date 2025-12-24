@@ -186,8 +186,9 @@ impl ScreenSnapshot {
         for row in 0..size.rows {
             let mut row_cells = Vec::with_capacity(size.cols as usize);
             for col in 0..size.cols {
-                let cell = screen.cell(row, col).map_or_else(ScreenCell::default, |c| {
-                    ScreenCell {
+                let cell = screen
+                    .cell(row, col)
+                    .map_or_else(ScreenCell::default, |c| ScreenCell {
                         char: c.contents().chars().next().unwrap_or(' '),
                         fg: convert_vt100_color(c.fgcolor()),
                         bg: convert_vt100_color(c.bgcolor()),
@@ -195,8 +196,7 @@ impl ScreenSnapshot {
                         italic: c.italic(),
                         underline: c.underline(),
                         inverse: c.inverse(),
-                    }
-                });
+                    });
                 row_cells.push(cell);
             }
             cells.push(row_cells);

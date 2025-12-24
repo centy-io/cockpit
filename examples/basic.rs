@@ -14,7 +14,9 @@ use std::time::{Duration, Instant};
 
 use cockpit::{CockpitWidget, ConfirmDialog, DialogState, Layout, PaneManager, PaneSize, SpawnConfig};
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers, MouseEventKind},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers, MouseEventKind,
+    },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -34,7 +36,11 @@ async fn main() -> io::Result<()> {
 
     // Restore terminal
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
     terminal.show_cursor()?;
 
     if let Err(e) = result {
@@ -120,7 +126,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
                     }
 
                     // Check for quit (Ctrl+Q) - immediate exit without dialog
-                    if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL)
+                    if key.code == KeyCode::Char('q')
+                        && key.modifiers.contains(KeyModifiers::CONTROL)
                     {
                         break;
                     }
@@ -147,7 +154,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
                     last_ctrl_c = None;
 
                     // Check for focus switch (Ctrl+N)
-                    if key.code == KeyCode::Char('n') && key.modifiers.contains(KeyModifiers::CONTROL)
+                    if key.code == KeyCode::Char('n')
+                        && key.modifiers.contains(KeyModifiers::CONTROL)
                     {
                         manager.focus_next();
                         continue;

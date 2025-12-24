@@ -133,10 +133,7 @@ pub(crate) fn spawn_pty(
 ///
 /// # Errors
 /// Returns an error if the resize operation fails.
-pub(crate) fn resize_pty(
-    pty_master: &dyn portable_pty::MasterPty,
-    size: PaneSize,
-) -> Result<()> {
+pub(crate) fn resize_pty(pty_master: &dyn portable_pty::MasterPty, size: PaneSize) -> Result<()> {
     pty_master
         .resize(PtySize {
             rows: size.rows,
@@ -173,10 +170,7 @@ fn spawn_reader_task(
                     }
 
                     // Emit output event (optional, for debugging)
-                    let _ = event_tx.blocking_send(PaneEvent::Output {
-                        pane_id,
-                        size: n,
-                    });
+                    let _ = event_tx.blocking_send(PaneEvent::Output { pane_id, size: n });
                 }
                 Err(e) => {
                     tracing::debug!("PTY read error for pane {}: {}", pane_id, e);

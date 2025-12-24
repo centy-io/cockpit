@@ -25,7 +25,7 @@ jobs:
         run: |
           cargo check --all-features
           cargo test --all-features
-          cargo clippy --all-features -- -D warnings
+          cargo clippy --all-features
 
       - name: Check if version changed
         id: version

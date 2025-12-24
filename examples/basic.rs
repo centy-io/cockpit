@@ -5,6 +5,7 @@
 //! Controls:
 //! - Ctrl+Q: Quit
 //! - Ctrl+N: Focus next pane
+//! - Mouse click: Focus pane under cursor
 //! - All other input goes to the focused pane
 
 use std::io::{self, stdout};
@@ -12,7 +13,7 @@ use std::time::Duration;
 
 use cockpit::{CockpitWidget, Layout, PaneManager, PaneSize, SpawnConfig};
 use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers, MouseEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -23,7 +24,7 @@ async fn main() -> io::Result<()> {
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -32,7 +33,7 @@ async fn main() -> io::Result<()> {
 
     // Restore terminal
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
     terminal.show_cursor()?;
 
     if let Err(e) = result {
@@ -58,6 +59,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
     let layout = Layout::vsplit_equal(Layout::single(pane1.id()), Layout::single(pane2.id()));
     manager.set_layout(layout);
 
+    // Track current areas for mouse handling
+    let mut current_areas = std::collections::HashMap::new();
+
     // Main event loop
     loop {
         // Draw UI
@@ -66,6 +70,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
 
             // Calculate layout areas
             let areas = manager.calculate_areas(area);
+            current_areas.clone_from(&areas);
             let areas_vec: Vec<_> = areas.into_iter().collect();
 
             // Get pane handles
@@ -82,22 +87,31 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
 
         // Handle events with a short timeout for responsive updates
         if event::poll(Duration::from_millis(16))? {
-            if let Event::Key(key) = event::read()? {
-                // Check for quit (Ctrl+Q)
-                if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL)
-                {
-                    break;
-                }
+            match event::read()? {
+                Event::Key(key) => {
+                    // Check for quit (Ctrl+Q)
+                    if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL)
+                    {
+                        break;
+                    }
 
-                // Check for focus switch (Ctrl+N)
-                if key.code == KeyCode::Char('n') && key.modifiers.contains(KeyModifiers::CONTROL)
-                {
-                    manager.focus_next();
-                    continue;
-                }
+                    // Check for focus switch (Ctrl+N)
+                    if key.code == KeyCode::Char('n') && key.modifiers.contains(KeyModifiers::CONTROL)
+                    {
+                        manager.focus_next();
+                        continue;
+                    }
 
-                // Route all other input to focused pane
-                manager.route_key(key).await?;
+                    // Route all other input to focused pane
+                    manager.route_key(key).await?;
+                }
+                Event::Mouse(mouse) => {
+                    // Handle mouse click to switch focus
+                    if matches!(mouse.kind, MouseEventKind::Down(_)) {
+                        manager.focus_at_position(mouse.column, mouse.row, &current_areas);
+                    }
+                }
+                _ => {}
             }
         }
 

@@ -278,6 +278,38 @@ impl PaneManager {
         self.focused = Some(ids[prev_pos]);
     }
 
+    /// Find which pane contains the given screen coordinates.
+    ///
+    /// Returns the `PaneId` of the pane at position (x, y), or `None` if
+    /// no pane contains that position.
+    #[must_use]
+    pub fn pane_at_position(&self, x: u16, y: u16, areas: &HashMap<PaneId, Rect>) -> Option<PaneId> {
+        for (pane_id, rect) in areas {
+            if x >= rect.x
+                && x < rect.x + rect.width
+                && y >= rect.y
+                && y < rect.y + rect.height
+            {
+                return Some(*pane_id);
+            }
+        }
+        None
+    }
+
+    /// Focus the pane at the given screen coordinates.
+    ///
+    /// Returns `true` if focus was changed, `false` if no pane was found
+    /// at the position or if the clicked pane was already focused.
+    pub fn focus_at_position(&mut self, x: u16, y: u16, areas: &HashMap<PaneId, Rect>) -> bool {
+        if let Some(pane_id) = self.pane_at_position(x, y, areas) {
+            if self.focused != Some(pane_id) {
+                self.focused = Some(pane_id);
+                return true;
+            }
+        }
+        false
+    }
+
     /// Convert the manager into a shared reference.
     #[must_use]
     pub fn into_shared(self) -> Arc<RwLock<Self>> {

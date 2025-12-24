@@ -12,7 +12,10 @@
 use std::io::{self, stdout};
 use std::time::{Duration, Instant};
 
-use cockpit::{CockpitWidget, ConfirmDialog, DialogState, Layout, PaneManager, PaneSize, SpawnConfig};
+use cockpit::{
+    CockpitWidget, ConfirmDialog, DialogState, GitUserPlugin, Layout, PaneManager, PaneSize,
+    SpawnConfig, StatusBarWidget, STATUS_BAR_HEIGHT,
+};
 use crossterm::{
     event::{
         self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers, MouseEventKind,
@@ -20,7 +23,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -54,8 +57,12 @@ async fn main() -> io::Result<()> {
 const CTRL_C_WINDOW: Duration = Duration::from_millis(500);
 
 async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockpit::Result<()> {
-    // Create pane manager
-    let mut manager = PaneManager::new();
+    // Create pane manager with plugin support
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let mut manager = PaneManager::new().with_plugins(cwd);
+
+    // Register the git user plugin for the status bar
+    let _ = manager.register_plugin(Box::new(GitUserPlugin::new()));
 
     // Get terminal size
     let term_size = terminal.size()?;
@@ -85,8 +92,27 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
         terminal.draw(|frame| {
             let area = frame.area();
 
-            // Calculate layout areas
-            let areas = manager.calculate_areas(area);
+            // Reserve space for status bar at the top
+            let status_bar_area = Rect {
+                x: area.x,
+                y: area.y,
+                width: area.width,
+                height: STATUS_BAR_HEIGHT,
+            };
+            let panes_area = Rect {
+                x: area.x,
+                y: area.y + STATUS_BAR_HEIGHT,
+                width: area.width,
+                height: area.height.saturating_sub(STATUS_BAR_HEIGHT),
+            };
+
+            // Render status bar with plugin segments
+            let segments = manager.status_bar_segments();
+            let status_bar = StatusBarWidget::new(&segments);
+            frame.render_widget(status_bar, status_bar_area);
+
+            // Calculate layout areas for panes
+            let areas = manager.calculate_areas(panes_area);
             current_areas.clone_from(&areas);
             let areas_vec: Vec<_> = areas.into_iter().collect();
 
@@ -99,7 +125,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
 
             // Render the cockpit widget
             let widget = CockpitWidget::new(&panes, &areas_vec, manager.focused());
-            frame.render_widget(widget, area);
+            frame.render_widget(widget, panes_area);
 
             // Render exit confirmation dialog if visible
             if dialog_state.visible {
@@ -186,6 +212,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
                 _ => {}
             }
         }
+
+        // Tick plugins to refresh status bar data
+        manager.tick_plugins();
 
         // Poll for pane events (crashes, exits, etc.)
         let events = manager.poll_events();

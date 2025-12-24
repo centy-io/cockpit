@@ -51,7 +51,9 @@ mod error;
 mod layout;
 mod manager;
 mod pane;
+mod plugins;
 mod pty;
+mod status_bar;
 mod widget;
 
 // Re-export public API
@@ -61,5 +63,10 @@ pub use manager::{ManagerConfig, PaneManager};
 pub use pane::{
     PaneHandle, PaneId, PaneSize, PaneState, ScreenCell, ScreenColor, ScreenSnapshot, SpawnConfig,
 };
+pub use plugins::{
+    GitUserPlugin, Plugin, PluginConfig, PluginContext, PluginError, PluginId, PluginRegistry,
+    PluginResult,
+};
 pub use pty::PaneEvent;
+pub use status_bar::{StatusBarConfig, StatusBarSegment, StatusBarWidget, STATUS_BAR_HEIGHT};
 pub use widget::{CockpitWidget, ConfirmDialog, DialogButton, DialogState, PaneWidget};

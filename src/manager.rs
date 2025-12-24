@@ -1,6 +1,7 @@
 //! Pane manager - central orchestrator for all panes.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -12,7 +13,9 @@ use tokio::task::JoinHandle;
 use crate::error::{Error, Result};
 use crate::layout::{Layout, LayoutCalculator};
 use crate::pane::{PaneHandle, PaneId, PaneSize, SpawnConfig};
+use crate::plugins::{Plugin, PluginId, PluginRegistry, PluginResult};
 use crate::pty::{self, PaneEvent, SpawnedPty};
+use crate::status_bar::StatusBarSegment;
 
 /// Configuration for the pane manager.
 #[derive(Clone, Debug)]
@@ -65,6 +68,8 @@ pub struct PaneManager {
     event_rx: mpsc::Receiver<PaneEvent>,
     /// Next pane ID.
     next_id: AtomicU64,
+    /// Plugin registry for status bar plugins.
+    plugin_registry: Option<PluginRegistry>,
 }
 
 impl PaneManager {
@@ -86,6 +91,7 @@ impl PaneManager {
             event_tx,
             event_rx,
             next_id: AtomicU64::new(1),
+            plugin_registry: None,
         }
     }
 
@@ -313,6 +319,42 @@ impl PaneManager {
     #[must_use]
     pub fn into_shared(self) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(self))
+    }
+
+    /// Enable the plugin system with a working directory.
+    #[must_use]
+    pub fn with_plugins(mut self, cwd: PathBuf) -> Self {
+        self.plugin_registry = Some(PluginRegistry::new(cwd));
+        self
+    }
+
+    /// Register a plugin.
+    ///
+    /// # Errors
+    /// Returns an error if plugins are not enabled or plugin registration fails.
+    pub fn register_plugin(&mut self, plugin: Box<dyn Plugin>) -> PluginResult<PluginId> {
+        self.plugin_registry
+            .as_mut()
+            .ok_or_else(|| {
+                crate::plugins::PluginError::InitFailed("plugins not enabled".to_string())
+            })?
+            .register(plugin)
+    }
+
+    /// Tick plugins (call in main loop).
+    pub fn tick_plugins(&mut self) {
+        if let Some(registry) = &mut self.plugin_registry {
+            registry.update_context(self.focused, self.panes.len(), 80);
+            registry.tick();
+        }
+    }
+
+    /// Get status bar segments for rendering.
+    #[must_use]
+    pub fn status_bar_segments(&self) -> Vec<&StatusBarSegment> {
+        self.plugin_registry
+            .as_ref()
+            .map_or_else(Vec::new, PluginRegistry::segments)
     }
 }
 

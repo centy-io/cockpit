@@ -62,4 +62,4 @@ pub use pane::{
     PaneHandle, PaneId, PaneSize, PaneState, ScreenCell, ScreenColor, ScreenSnapshot, SpawnConfig,
 };
 pub use pty::PaneEvent;
-pub use widget::{CockpitWidget, PaneWidget};
+pub use widget::{CockpitWidget, ConfirmDialog, DialogButton, DialogState, PaneWidget};

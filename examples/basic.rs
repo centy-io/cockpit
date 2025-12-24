@@ -3,15 +3,16 @@
 //! Run with: cargo run --example basic
 //!
 //! Controls:
-//! - Ctrl+Q: Quit
+//! - Ctrl+C (twice): Open exit confirmation dialog
+//! - Ctrl+Q: Quit immediately
 //! - Ctrl+N: Focus next pane
 //! - Mouse click: Focus pane under cursor
 //! - All other input goes to the focused pane
 
 use std::io::{self, stdout};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use cockpit::{CockpitWidget, Layout, PaneManager, PaneSize, SpawnConfig};
+use cockpit::{CockpitWidget, ConfirmDialog, DialogState, Layout, PaneManager, PaneSize, SpawnConfig};
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers, MouseEventKind},
     execute,
@@ -43,6 +44,9 @@ async fn main() -> io::Result<()> {
     Ok(())
 }
 
+/// Time window for detecting double Ctrl+C press (500ms).
+const CTRL_C_WINDOW: Duration = Duration::from_millis(500);
+
 async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockpit::Result<()> {
     // Create pane manager
     let mut manager = PaneManager::new();
@@ -61,6 +65,13 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
 
     // Track current areas for mouse handling
     let mut current_areas = std::collections::HashMap::new();
+
+    // Dialog state for exit confirmation
+    let mut dialog_state = DialogState::new();
+    let mut dialog_area = ratatui::layout::Rect::default();
+
+    // Track Ctrl+C press timing for double-press detection
+    let mut last_ctrl_c: Option<Instant> = None;
 
     // Main event loop
     loop {
@@ -83,17 +94,57 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
             // Render the cockpit widget
             let widget = CockpitWidget::new(&panes, &areas_vec, manager.focused());
             frame.render_widget(widget, area);
+
+            // Render exit confirmation dialog if visible
+            if dialog_state.visible {
+                dialog_area = DialogState::calculate_area(area);
+                let dialog = ConfirmDialog::new(" Exit Cockpit? ", "Are you sure you want to quit?")
+                    .selected(dialog_state.selected);
+                frame.render_widget(dialog, dialog_area);
+            }
         })?;
 
         // Handle events with a short timeout for responsive updates
         if event::poll(Duration::from_millis(16))? {
             match event::read()? {
                 Event::Key(key) => {
-                    // Check for quit (Ctrl+Q)
+                    // If dialog is visible, route input to dialog
+                    if dialog_state.visible {
+                        if let Some(confirmed) = dialog_state.handle_key(key) {
+                            if confirmed {
+                                break; // User confirmed exit
+                            }
+                            // User cancelled, continue running
+                        }
+                        continue;
+                    }
+
+                    // Check for quit (Ctrl+Q) - immediate exit without dialog
                     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL)
                     {
                         break;
                     }
+
+                    // Check for Ctrl+C double-press to show exit dialog
+                    if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL)
+                    {
+                        let now = Instant::now();
+                        if let Some(last) = last_ctrl_c {
+                            if now.duration_since(last) < CTRL_C_WINDOW {
+                                // Double Ctrl+C detected, show dialog
+                                dialog_state.show();
+                                last_ctrl_c = None;
+                                continue;
+                            }
+                        }
+                        // First Ctrl+C, record time and send to pane
+                        last_ctrl_c = Some(now);
+                        manager.route_key(key).await?;
+                        continue;
+                    }
+
+                    // Reset Ctrl+C tracking on any other key
+                    last_ctrl_c = None;
 
                     // Check for focus switch (Ctrl+N)
                     if key.code == KeyCode::Char('n') && key.modifiers.contains(KeyModifiers::CONTROL)
@@ -106,6 +157,19 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
                     manager.route_key(key).await?;
                 }
                 Event::Mouse(mouse) => {
+                    // If dialog is visible, handle mouse for dialog
+                    if dialog_state.visible {
+                        if matches!(mouse.kind, MouseEventKind::Down(_)) {
+                            if let Some(confirmed) = dialog_state.handle_mouse(mouse.column, mouse.row, dialog_area) {
+                                if confirmed {
+                                    break; // User clicked Yes
+                                }
+                                // User clicked No, continue running
+                            }
+                        }
+                        continue;
+                    }
+
                     // Handle mouse click to switch focus
                     if matches!(mouse.kind, MouseEventKind::Down(_)) {
                         manager.focus_at_position(mouse.column, mouse.row, &current_areas);

@@ -130,8 +130,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
             // Render exit confirmation dialog if visible
             if dialog_state.visible {
                 dialog_area = DialogState::calculate_area(area);
-                let dialog = ConfirmDialog::new(" Exit Cockpit? ", "Are you sure you want to quit?")
-                    .selected(dialog_state.selected);
+                let dialog =
+                    ConfirmDialog::new(" Exit Cockpit? ", "Are you sure you want to quit?")
+                        .selected(dialog_state.selected);
                 frame.render_widget(dialog, dialog_area);
             }
         })?;
@@ -159,7 +160,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
                     }
 
                     // Check for Ctrl+C double-press to show exit dialog
-                    if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL)
+                    if key.code == KeyCode::Char('c')
+                        && key.modifiers.contains(KeyModifiers::CONTROL)
                     {
                         let now = Instant::now();
                         if let Some(last) = last_ctrl_c {
@@ -194,7 +196,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
                     // If dialog is visible, handle mouse for dialog
                     if dialog_state.visible {
                         if matches!(mouse.kind, MouseEventKind::Down(_)) {
-                            if let Some(confirmed) = dialog_state.handle_mouse(mouse.column, mouse.row, dialog_area) {
+                            if let Some(confirmed) =
+                                dialog_state.handle_mouse(mouse.column, mouse.row, dialog_area)
+                            {
                                 if confirmed {
                                     break; // User clicked Yes
                                 }

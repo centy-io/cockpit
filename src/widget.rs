@@ -168,7 +168,10 @@ impl<'a> ConfirmDialog<'a> {
             message,
             selected: DialogButton::Yes,
             border_style: Style::default().fg(Color::Yellow),
-            selected_style: Style::default().fg(Color::Black).bg(Color::White).add_modifier(Modifier::BOLD),
+            selected_style: Style::default()
+                .fg(Color::Black)
+                .bg(Color::White)
+                .add_modifier(Modifier::BOLD),
             unselected_style: Style::default().fg(Color::White),
         }
     }
@@ -217,8 +220,7 @@ impl Widget for ConfirmDialog<'_> {
         block.render(area, buf);
 
         // Render message
-        let message = Paragraph::new(self.message)
-            .alignment(Alignment::Center);
+        let message = Paragraph::new(self.message).alignment(Alignment::Center);
         let message_area = Rect::new(inner.x, inner.y + 1, inner.width, 1);
         message.render(message_area, buf);
 
@@ -234,8 +236,16 @@ impl Widget for ConfirmDialog<'_> {
             self.unselected_style
         };
 
-        let yes_text = if self.selected == DialogButton::Yes { "[ Yes ]" } else { "  Yes  " };
-        let no_text = if self.selected == DialogButton::No { "[ No ]" } else { "  No  " };
+        let yes_text = if self.selected == DialogButton::Yes {
+            "[ Yes ]"
+        } else {
+            "  Yes  "
+        };
+        let no_text = if self.selected == DialogButton::No {
+            "[ No ]"
+        } else {
+            "  No  "
+        };
 
         let buttons = Line::from(vec![
             Span::styled(yes_text, yes_style),
@@ -244,14 +254,24 @@ impl Widget for ConfirmDialog<'_> {
         ]);
 
         let buttons_paragraph = Paragraph::new(buttons).alignment(Alignment::Center);
-        let buttons_area = Rect::new(inner.x, inner.y + inner.height.saturating_sub(2), inner.width, 1);
+        let buttons_area = Rect::new(
+            inner.x,
+            inner.y + inner.height.saturating_sub(2),
+            inner.width,
+            1,
+        );
         buttons_paragraph.render(buttons_area, buf);
 
         // Render hint
         let hint = Paragraph::new("y/n • Enter • ←→ • Click")
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::DarkGray));
-        let hint_area = Rect::new(inner.x, inner.y + inner.height.saturating_sub(1), inner.width, 1);
+        let hint_area = Rect::new(
+            inner.x,
+            inner.y + inner.height.saturating_sub(1),
+            inner.width,
+            1,
+        );
         hint.render(hint_area, buf);
     }
 }

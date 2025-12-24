@@ -13,8 +13,8 @@ use std::io::{self, stdout};
 use std::time::{Duration, Instant};
 
 use cockpit::{
-    CockpitWidget, ConfirmDialog, DialogState, GitUserPlugin, Layout, PaneManager, PaneSize,
-    SpawnConfig, StatusBarWidget, STATUS_BAR_HEIGHT,
+    CockpitWidget, ConfirmDialog, DialogState, GitUserPlugin, PaneManager, SpawnConfig,
+    StatusBarWidget, STATUS_BAR_HEIGHT,
 };
 use crossterm::{
     event::{
@@ -64,20 +64,19 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
     // Register the git user plugin for the status bar
     let _ = manager.register_plugin(Box::new(GitUserPlugin::new()));
 
-    // Get terminal size
+    // Get terminal size and set it in the manager
     let term_size = terminal.size()?;
-    let pane_size = PaneSize::new(term_size.height / 2, term_size.width / 2);
+    let panes_area = Rect {
+        x: 0,
+        y: STATUS_BAR_HEIGHT,
+        width: term_size.width,
+        height: term_size.height.saturating_sub(STATUS_BAR_HEIGHT),
+    };
+    manager.set_terminal_size(panes_area);
 
-    // Spawn two panes with shells
-    let pane1 = manager.spawn(SpawnConfig::new(pane_size))?;
-    let pane2 = manager.spawn(SpawnConfig::new(pane_size))?;
-
-    // Set up a vertical split layout (side by side)
-    let layout = Layout::vsplit_equal(Layout::single(pane1.id()), Layout::single(pane2.id()));
-    manager.set_layout(layout);
-
-    // Track current areas for mouse handling
-    let mut current_areas = std::collections::HashMap::new();
+    // Spawn two panes - layout is automatic (side by side)!
+    manager.spawn(SpawnConfig::new_shell())?;
+    manager.spawn(SpawnConfig::new_shell())?;
 
     // Dialog state for exit confirmation
     let mut dialog_state = DialogState::new();
@@ -111,10 +110,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
             let status_bar = StatusBarWidget::new(&segments);
             frame.render_widget(status_bar, status_bar_area);
 
-            // Calculate layout areas for panes
-            let areas = manager.calculate_areas(panes_area);
-            current_areas.clone_from(&areas);
-            let areas_vec: Vec<_> = areas.into_iter().collect();
+            // Get pre-calculated layout areas (automatic!)
+            let areas = manager.get_areas();
+            let areas_vec: Vec<_> = areas.iter().map(|(&id, &rect)| (id, rect)).collect();
 
             // Get pane handles
             let pane_ids = manager.pane_ids();
@@ -210,7 +208,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
 
                     // Handle mouse click to switch focus
                     if matches!(mouse.kind, MouseEventKind::Down(_)) {
-                        manager.focus_at_position(mouse.column, mouse.row, &current_areas);
+                        let areas = manager.get_areas().clone();
+                        manager.focus_at_position(mouse.column, mouse.row, &areas);
                     }
                 }
                 _ => {}

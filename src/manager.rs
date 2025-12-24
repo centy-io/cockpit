@@ -29,7 +29,7 @@ pub struct ManagerConfig {
 impl Default for ManagerConfig {
     fn default() -> Self {
         Self {
-            max_panes: 64,
+            max_panes: 2,
             scrollback_lines: 10_000,
         }
     }
@@ -58,7 +58,7 @@ pub struct PaneManager {
     config: ManagerConfig,
     /// All active panes.
     panes: HashMap<PaneId, ManagedPane>,
-    /// Current layout.
+    /// Current layout (internal, automatically managed).
     layout: Option<Layout>,
     /// Currently focused pane.
     focused: Option<PaneId>,
@@ -70,6 +70,12 @@ pub struct PaneManager {
     next_id: AtomicU64,
     /// Plugin registry for status bar plugins.
     plugin_registry: Option<PluginRegistry>,
+    /// Current terminal size for automatic layout calculations.
+    terminal_size: Option<Rect>,
+    /// Pre-calculated pane areas (updated on spawn/close/resize).
+    cached_areas: HashMap<PaneId, Rect>,
+    /// Order of panes for consistent layout (first = left, second = right).
+    pane_order: Vec<PaneId>,
 }
 
 impl PaneManager {
@@ -83,6 +89,11 @@ impl PaneManager {
     #[must_use]
     pub fn with_config(config: ManagerConfig) -> Self {
         let (event_tx, event_rx) = mpsc::channel(256);
+        // Enforce max_panes = 2
+        let config = ManagerConfig {
+            max_panes: config.max_panes.min(2),
+            ..config
+        };
         Self {
             config,
             panes: HashMap::new(),
@@ -92,13 +103,19 @@ impl PaneManager {
             event_rx,
             next_id: AtomicU64::new(1),
             plugin_registry: None,
+            terminal_size: None,
+            cached_areas: HashMap::new(),
+            pane_order: Vec::with_capacity(2),
         }
     }
 
     /// Spawn a new pane with the given configuration.
     ///
+    /// The pane size is calculated automatically based on the current terminal
+    /// size and number of panes. Layout is updated automatically.
+    ///
     /// # Errors
-    /// Returns an error if pane spawning fails or max panes is reached.
+    /// Returns an error if pane spawning fails or max panes (2) is reached.
     pub fn spawn(&mut self, config: SpawnConfig) -> Result<PaneHandle> {
         if self.panes.len() >= self.config.max_panes {
             return Err(Error::Layout(format!(
@@ -109,7 +126,11 @@ impl PaneManager {
 
         let pane_id = PaneId(self.next_id.fetch_add(1, Ordering::SeqCst));
 
+        // Calculate initial size from terminal size
+        let initial_size = self.calculate_initial_pane_size();
+
         let mut spawn_config = config;
+        spawn_config.size = initial_size; // Override with calculated size
         if spawn_config.scrollback == 0 {
             spawn_config.scrollback = self.config.scrollback_lines;
         }
@@ -131,29 +152,20 @@ impl PaneManager {
         };
 
         self.panes.insert(pane_id, managed);
+        self.pane_order.push(pane_id);
 
         // Auto-focus first pane
         if self.focused.is_none() {
             self.focused = Some(pane_id);
         }
 
-        // Auto-set layout if this is the first pane
-        if self.layout.is_none() {
-            self.layout = Some(Layout::single(pane_id));
-        }
+        // Recalculate layout for new pane count
+        self.recalculate_layout();
+
+        // Resize all panes to their new areas (ignore errors during spawn)
+        let _ = self.resize_all_panes();
 
         Ok(handle)
-    }
-
-    /// Get the current layout.
-    #[must_use]
-    pub fn layout(&self) -> Option<&Layout> {
-        self.layout.as_ref()
-    }
-
-    /// Set the layout.
-    pub fn set_layout(&mut self, layout: Layout) {
-        self.layout = Some(layout);
     }
 
     /// Get the currently focused pane ID.
@@ -207,6 +219,94 @@ impl PaneManager {
         pty::resize_pty(managed.pty_master.as_ref(), size)
     }
 
+    /// Set the terminal size and initialize internal layout calculations.
+    ///
+    /// This should be called once at startup with the initial terminal size,
+    /// before spawning any panes. Cockpit manages all layout internally.
+    pub fn set_terminal_size(&mut self, size: Rect) {
+        if self.terminal_size == Some(size) {
+            return;
+        }
+        self.terminal_size = Some(size);
+        self.recalculate_layout();
+        let _ = self.resize_all_panes();
+    }
+
+    /// Get pre-calculated pane areas.
+    ///
+    /// These are updated automatically when panes are added/removed or on resize.
+    #[must_use]
+    pub fn get_areas(&self) -> &HashMap<PaneId, Rect> {
+        &self.cached_areas
+    }
+
+    /// Recalculate layout based on current panes and terminal size.
+    fn recalculate_layout(&mut self) {
+        let Some(area) = self.terminal_size else {
+            return;
+        };
+
+        match self.pane_order.len() {
+            0 => {
+                self.layout = None;
+                self.cached_areas.clear();
+            }
+            1 => {
+                let pane_id = self.pane_order[0];
+                self.layout = Some(Layout::single(pane_id));
+                self.cached_areas.clear();
+                self.cached_areas.insert(pane_id, area);
+            }
+            2 => {
+                let pane1 = self.pane_order[0];
+                let pane2 = self.pane_order[1];
+                self.layout = Some(Layout::vsplit_equal(
+                    Layout::single(pane1),
+                    Layout::single(pane2),
+                ));
+                if let Some(layout) = &self.layout {
+                    self.cached_areas = LayoutCalculator::calculate_areas(layout, area);
+                }
+            }
+            _ => {
+                // Should never happen due to max_panes = 2
+            }
+        }
+    }
+
+    /// Resize all panes to match their calculated areas.
+    fn resize_all_panes(&mut self) -> Result<()> {
+        for (pane_id, area) in &self.cached_areas {
+            // Subtract 2 for border (1 on each side)
+            let inner_width = area.width.saturating_sub(2);
+            let inner_height = area.height.saturating_sub(2);
+
+            if let Some(managed) = self.panes.get(pane_id) {
+                let size = PaneSize::new(inner_height, inner_width);
+                pty::resize_pty(managed.pty_master.as_ref(), size)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Calculate initial pane size for spawning.
+    fn calculate_initial_pane_size(&self) -> PaneSize {
+        if let Some(area) = self.terminal_size {
+            // Estimate size based on how many panes will exist
+            let future_pane_count = self.panes.len() + 1;
+            let (width, height) = if future_pane_count == 1 {
+                (area.width.saturating_sub(2), area.height.saturating_sub(2))
+            } else {
+                // 2 panes: split horizontally
+                (area.width / 2 - 1, area.height.saturating_sub(2))
+            };
+            PaneSize::new(height, width)
+        } else {
+            // Default fallback size
+            PaneSize::new(24, 80)
+        }
+    }
+
     /// Send input to the focused pane.
     ///
     /// # Errors
@@ -242,6 +342,8 @@ impl PaneManager {
     }
 
     /// Close a pane.
+    ///
+    /// Layout is automatically recalculated after closing.
     pub fn close_pane(&mut self, pane_id: PaneId) {
         if let Some(managed) = self.panes.remove(&pane_id) {
             // Abort tasks
@@ -250,10 +352,19 @@ impl PaneManager {
             managed.monitor_handle.abort();
         }
 
+        // Remove from pane_order
+        self.pane_order.retain(|&id| id != pane_id);
+
         // Update focus if needed
         if self.focused == Some(pane_id) {
-            self.focused = self.panes.keys().next().copied();
+            self.focused = self.pane_order.first().copied();
         }
+
+        // Recalculate layout
+        self.recalculate_layout();
+
+        // Resize remaining panes (ignore errors)
+        let _ = self.resize_all_panes();
     }
 
     /// Cycle focus to the next pane.

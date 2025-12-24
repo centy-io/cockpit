@@ -87,7 +87,33 @@ pub struct SpawnConfig {
 }
 
 impl SpawnConfig {
-    /// Create a new spawn config with default shell.
+    /// Create a new spawn config for the default shell.
+    ///
+    /// The pane size is calculated automatically by the `PaneManager`.
+    #[must_use]
+    pub fn new_shell() -> Self {
+        Self {
+            scrollback: 10_000,
+            ..Default::default()
+        }
+    }
+
+    /// Create a new spawn config for a specific command.
+    ///
+    /// The pane size is calculated automatically by the `PaneManager`.
+    #[must_use]
+    pub fn new_command(cmd: impl Into<String>) -> Self {
+        Self {
+            command: Some(cmd.into()),
+            scrollback: 10_000,
+            ..Default::default()
+        }
+    }
+
+    /// Create a new spawn config with specified size.
+    ///
+    /// Note: The size may be overridden by the `PaneManager`'s automatic
+    /// layout calculations.
     #[must_use]
     pub fn new(size: PaneSize) -> Self {
         Self {

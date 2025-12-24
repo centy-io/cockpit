@@ -2,12 +2,259 @@
 
 use ratatui::{
     buffer::Buffer,
-    layout::Rect,
+    layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Widget},
+    text::{Line, Span},
+    widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
 
 use crate::pane::{PaneHandle, PaneId, ScreenColor};
+
+/// Which button is selected in a confirm dialog.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DialogButton {
+    /// The "Yes" button is selected.
+    #[default]
+    Yes,
+    /// The "No" button is selected.
+    No,
+}
+
+impl DialogButton {
+    /// Toggle to the other button.
+    #[must_use]
+    pub fn toggle(self) -> Self {
+        match self {
+            Self::Yes => Self::No,
+            Self::No => Self::Yes,
+        }
+    }
+}
+
+/// State for the confirm dialog.
+#[derive(Debug, Clone, Default)]
+pub struct DialogState {
+    /// Whether the dialog is visible.
+    pub visible: bool,
+    /// Which button is currently selected.
+    pub selected: DialogButton,
+}
+
+impl DialogState {
+    /// Create a new hidden dialog state.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Show the dialog with Yes selected by default.
+    pub fn show(&mut self) {
+        self.visible = true;
+        self.selected = DialogButton::Yes;
+    }
+
+    /// Hide the dialog.
+    pub fn hide(&mut self) {
+        self.visible = false;
+    }
+
+    /// Select the next button (toggle between Yes and No).
+    pub fn next(&mut self) {
+        self.selected = self.selected.toggle();
+    }
+
+    /// Select the previous button (toggle between Yes and No).
+    pub fn prev(&mut self) {
+        self.selected = self.selected.toggle();
+    }
+
+    /// Handle a key press. Returns Some(true) for Yes, Some(false) for No, None if not handled.
+    #[must_use]
+    pub fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> Option<bool> {
+        use crossterm::event::KeyCode;
+
+        if !self.visible {
+            return None;
+        }
+
+        match key.code {
+            KeyCode::Char('y' | 'Y') => {
+                self.hide();
+                Some(true)
+            }
+            KeyCode::Char('n' | 'N') | KeyCode::Esc => {
+                self.hide();
+                Some(false)
+            }
+            KeyCode::Enter => {
+                let result = self.selected == DialogButton::Yes;
+                self.hide();
+                Some(result)
+            }
+            KeyCode::Left | KeyCode::Right | KeyCode::Tab => {
+                self.next();
+                None
+            }
+            KeyCode::Up | KeyCode::Down => {
+                // Arrow keys also toggle
+                self.next();
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// Handle a mouse click. Returns Some(true) for Yes, Some(false) for No, None if not on a button.
+    #[must_use]
+    pub fn handle_mouse(&mut self, x: u16, y: u16, dialog_area: Rect) -> Option<bool> {
+        if !self.visible {
+            return None;
+        }
+
+        // Calculate button areas (matching ConfirmDialog rendering)
+        let button_y = dialog_area.y + dialog_area.height - 3;
+        let yes_x_start = dialog_area.x + dialog_area.width / 2 - 8;
+        let yes_x_end = yes_x_start + 6;
+        let no_x_start = dialog_area.x + dialog_area.width / 2 + 2;
+        let no_x_end = no_x_start + 5;
+
+        if y == button_y {
+            if x >= yes_x_start && x < yes_x_end {
+                self.hide();
+                return Some(true);
+            }
+            if x >= no_x_start && x < no_x_end {
+                self.hide();
+                return Some(false);
+            }
+        }
+
+        None
+    }
+
+    /// Calculate the dialog area for a given terminal size.
+    #[must_use]
+    pub fn calculate_area(terminal_area: Rect) -> Rect {
+        let width = 40.min(terminal_area.width.saturating_sub(4));
+        let height = 7.min(terminal_area.height.saturating_sub(2));
+        let x = terminal_area.x + (terminal_area.width.saturating_sub(width)) / 2;
+        let y = terminal_area.y + (terminal_area.height.saturating_sub(height)) / 2;
+        Rect::new(x, y, width, height)
+    }
+}
+
+/// A confirmation dialog widget.
+pub struct ConfirmDialog<'a> {
+    /// Title of the dialog.
+    title: &'a str,
+    /// Message to display.
+    message: &'a str,
+    /// Which button is selected.
+    selected: DialogButton,
+    /// Style for the dialog border.
+    border_style: Style,
+    /// Style for the selected button.
+    selected_style: Style,
+    /// Style for the unselected button.
+    unselected_style: Style,
+}
+
+impl<'a> ConfirmDialog<'a> {
+    /// Create a new confirm dialog.
+    #[must_use]
+    pub fn new(title: &'a str, message: &'a str) -> Self {
+        Self {
+            title,
+            message,
+            selected: DialogButton::Yes,
+            border_style: Style::default().fg(Color::Yellow),
+            selected_style: Style::default().fg(Color::Black).bg(Color::White).add_modifier(Modifier::BOLD),
+            unselected_style: Style::default().fg(Color::White),
+        }
+    }
+
+    /// Set which button is selected.
+    #[must_use]
+    pub fn selected(mut self, selected: DialogButton) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    /// Set the border style.
+    #[must_use]
+    pub fn border_style(mut self, style: Style) -> Self {
+        self.border_style = style;
+        self
+    }
+
+    /// Set the selected button style.
+    #[must_use]
+    pub fn selected_style(mut self, style: Style) -> Self {
+        self.selected_style = style;
+        self
+    }
+
+    /// Set the unselected button style.
+    #[must_use]
+    pub fn unselected_style(mut self, style: Style) -> Self {
+        self.unselected_style = style;
+        self
+    }
+}
+
+impl Widget for ConfirmDialog<'_> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        // Clear the area behind the dialog
+        Clear.render(area, buf);
+
+        // Create dialog block
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(self.border_style)
+            .title(self.title);
+
+        let inner = block.inner(area);
+        block.render(area, buf);
+
+        // Render message
+        let message = Paragraph::new(self.message)
+            .alignment(Alignment::Center);
+        let message_area = Rect::new(inner.x, inner.y + 1, inner.width, 1);
+        message.render(message_area, buf);
+
+        // Render buttons
+        let yes_style = if self.selected == DialogButton::Yes {
+            self.selected_style
+        } else {
+            self.unselected_style
+        };
+        let no_style = if self.selected == DialogButton::No {
+            self.selected_style
+        } else {
+            self.unselected_style
+        };
+
+        let yes_text = if self.selected == DialogButton::Yes { "[ Yes ]" } else { "  Yes  " };
+        let no_text = if self.selected == DialogButton::No { "[ No ]" } else { "  No  " };
+
+        let buttons = Line::from(vec![
+            Span::styled(yes_text, yes_style),
+            Span::raw("   "),
+            Span::styled(no_text, no_style),
+        ]);
+
+        let buttons_paragraph = Paragraph::new(buttons).alignment(Alignment::Center);
+        let buttons_area = Rect::new(inner.x, inner.y + inner.height.saturating_sub(2), inner.width, 1);
+        buttons_paragraph.render(buttons_area, buf);
+
+        // Render hint
+        let hint = Paragraph::new("y/n • Enter • ←→ • Click")
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::DarkGray));
+        let hint_area = Rect::new(inner.x, inner.y + inner.height.saturating_sub(1), inner.width, 1);
+        hint.render(hint_area, buf);
+    }
+}
 
 /// Widget for rendering a single pane's terminal content.
 pub struct PaneWidget<'a> {

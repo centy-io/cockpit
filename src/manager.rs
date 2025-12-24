@@ -184,11 +184,9 @@ impl PaneManager {
     /// Calculate layout areas for the given total area.
     #[must_use]
     pub fn calculate_areas(&self, area: Rect) -> HashMap<PaneId, Rect> {
-        self.layout
-            .as_ref()
-            .map_or_else(HashMap::new, |layout| {
-                LayoutCalculator::calculate_areas(layout, area)
-            })
+        self.layout.as_ref().map_or_else(HashMap::new, |layout| {
+            LayoutCalculator::calculate_areas(layout, area)
+        })
     }
 
     /// Resize a pane's PTY.
@@ -283,13 +281,14 @@ impl PaneManager {
     /// Returns the `PaneId` of the pane at position (x, y), or `None` if
     /// no pane contains that position.
     #[must_use]
-    pub fn pane_at_position(&self, x: u16, y: u16, areas: &HashMap<PaneId, Rect>) -> Option<PaneId> {
+    pub fn pane_at_position(
+        &self,
+        x: u16,
+        y: u16,
+        areas: &HashMap<PaneId, Rect>,
+    ) -> Option<PaneId> {
         for (pane_id, rect) in areas {
-            if x >= rect.x
-                && x < rect.x + rect.width
-                && y >= rect.y
-                && y < rect.y + rect.height
-            {
+            if x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height {
                 return Some(*pane_id);
             }
         }

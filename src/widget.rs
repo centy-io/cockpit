@@ -339,9 +339,7 @@ impl<'a> PaneWidget<'a> {
             Style::default().fg(Color::DarkGray)
         };
 
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(style)
+        Block::default().borders(Borders::ALL).border_style(style)
     }
 }
 

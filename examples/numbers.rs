@@ -16,8 +16,8 @@ use std::io::{self, stdout};
 use std::time::{Duration, Instant};
 
 use cockpit::{
-    CockpitWidget, ConfirmDialog, DialogState, GitUserPlugin, PaneManager,
-    StatusBarWidget, STATUS_BAR_HEIGHT,
+    CockpitWidget, ConfirmDialog, DialogState, GitUserPlugin, PaneManager, StatusBarWidget,
+    STATUS_BAR_HEIGHT,
 };
 use crossterm::{
     event::{

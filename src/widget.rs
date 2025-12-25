@@ -567,7 +567,8 @@ impl Widget for CockpitWidget<'_> {
     fn render(self, _area: Rect, buf: &mut Buffer) {
         // Panel labels: positions 1-4 (panes) and 5-12 (sub-panels)
         const PANE_LABELS: [&str; 4] = ["110", "120", "210", "220"];
-        const SUB_PANEL_LABELS: [&str; 8] = ["111", "112", "121", "122", "211", "212", "221", "222"];
+        const SUB_PANEL_LABELS: [&str; 8] =
+            ["111", "112", "121", "122", "211", "212", "221", "222"];
 
         // Create a lookup for pane handles
         let pane_map: std::collections::HashMap<_, _> =

@@ -661,12 +661,12 @@ impl Widget for CockpitWidget<'_> {
 
         // Render sub-panes
         for (idx, sub_area) in self.sub_pane_areas.iter().enumerate() {
-            // First sub-pane: LEFT + BOTTOM + RIGHT (no TOP - shared edge with panes above)
-            // Others: BOTTOM + RIGHT only (no LEFT, no TOP)
+            // First sub-pane: ALL borders
+            // Others: TOP + BOTTOM + RIGHT (no LEFT to avoid double border)
             let borders = if idx == 0 {
-                Borders::LEFT | Borders::BOTTOM | Borders::RIGHT
+                Borders::ALL
             } else {
-                Borders::BOTTOM | Borders::RIGHT
+                Borders::TOP | Borders::BOTTOM | Borders::RIGHT
             };
 
             let block = Block::default()

@@ -44,6 +44,7 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
 
+mod arrows;
 mod error;
 mod layout;
 mod manager;
@@ -54,6 +55,7 @@ mod status_bar;
 mod widget;
 
 // Re-export public API
+pub use arrows::ArrowPosition;
 pub use error::{Error, Result};
 pub use manager::{ManagerConfig, PaneManager};
 pub use pane::{
@@ -66,6 +68,5 @@ pub use plugins::{
 pub use pty::PaneEvent;
 pub use status_bar::{StatusBarConfig, StatusBarSegment, StatusBarWidget, STATUS_BAR_HEIGHT};
 pub use widget::{
-    ArrowPosition, CockpitWidget, ConfirmDialog, DialogButton, DialogState, PaneWidget,
-    SubPaneWidget,
+    CockpitWidget, ConfirmDialog, DialogButton, DialogState, PaneWidget, SubPaneWidget,
 };

@@ -8,116 +8,10 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
 
+use crate::arrows::{
+    is_left_arrow_position, ARROW_HEIGHT, ARROW_WIDTH, DOWN_ARROW, UP_ARROW,
+};
 use crate::pane::{PaneHandle, PaneId, ScreenColor};
-
-/// Arrow positions for overlay navigation.
-/// These correspond to clickable arrows in the sub-panes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ArrowPosition {
-    /// Bottom-left arrow in sub-pane 111 (under pane 110)
-    Pane111,
-    /// Bottom-right arrow in sub-pane 122 (under pane 120)
-    Pane122,
-    /// Bottom-left arrow in sub-pane 211 (under pane 210)
-    Pane211,
-    /// Bottom-right arrow in sub-pane 222 (under pane 220)
-    Pane222,
-}
-
-impl ArrowPosition {
-    /// Get the pane position index (0-3) that this arrow controls.
-    /// Used for toggling pane expansion.
-    #[must_use]
-    pub fn pane_position(self) -> usize {
-        match self {
-            Self::Pane111 => 0, // Controls pane 110 (position 0)
-            Self::Pane122 => 1, // Controls pane 120 (position 1)
-            Self::Pane211 => 2, // Controls pane 210 (position 2)
-            Self::Pane222 => 3, // Controls pane 220 (position 3)
-        }
-    }
-}
-
-/// Arrow dimensions for hit detection.
-const ARROW_WIDTH: u16 = 5;
-const ARROW_HEIGHT: u16 = 3;
-
-/// Check if a click at (x, y) hits any up arrow on expanded panes.
-/// Returns the pane position (0-3) if an up arrow was clicked, None otherwise.
-#[must_use]
-pub fn up_arrow_at_position(
-    x: u16,
-    y: u16,
-    pane_areas: &[(PaneId, Rect)],
-    expanded_positions: &[bool; 4],
-) -> Option<usize> {
-    for (idx, (_, pane_area)) in pane_areas.iter().enumerate() {
-        if idx >= 4 || !expanded_positions[idx] {
-            continue;
-        }
-
-        let base_y = pane_area.y + pane_area.height.saturating_sub(1 + ARROW_HEIGHT);
-
-        // Position 0 and 2: bottom-left, Position 1 and 3: bottom-right
-        let is_left = idx == 0 || idx == 2;
-        let base_x = if is_left {
-            pane_area.x + 1
-        } else {
-            pane_area.x + pane_area.width.saturating_sub(1 + ARROW_WIDTH)
-        };
-
-        // Check if click is within arrow bounds
-        if x >= base_x
-            && x < base_x + ARROW_WIDTH
-            && y >= base_y
-            && y < base_y + ARROW_HEIGHT
-        {
-            return Some(idx);
-        }
-    }
-
-    None
-}
-
-/// Check if a click at (x, y) hits any of the navigation arrows (down arrows on sub-panes).
-/// Returns the arrow position if clicked, None otherwise.
-#[must_use]
-pub fn arrow_at_position(x: u16, y: u16, sub_pane_areas: &[Rect]) -> Option<ArrowPosition> {
-    // Arrow indices: 111=0, 122=3, 211=4, 222=7
-    let arrow_configs: [(usize, ArrowPosition, bool); 4] = [
-        (0, ArrowPosition::Pane111, true),  // idx 0, left-aligned
-        (3, ArrowPosition::Pane122, false), // idx 3, right-aligned
-        (4, ArrowPosition::Pane211, true),  // idx 4, left-aligned
-        (7, ArrowPosition::Pane222, false), // idx 7, right-aligned
-    ];
-
-    for (idx, position, is_left) in arrow_configs {
-        if let Some(sub_area) = sub_pane_areas.get(idx) {
-            // Skip empty sub-panes (expanded positions)
-            if sub_area.width == 0 || sub_area.height == 0 {
-                continue;
-            }
-
-            let base_y = sub_area.y + sub_area.height.saturating_sub(1 + ARROW_HEIGHT);
-            let base_x = if is_left {
-                sub_area.x + 1
-            } else {
-                sub_area.x + sub_area.width.saturating_sub(1 + ARROW_WIDTH)
-            };
-
-            // Check if click is within arrow bounds
-            if x >= base_x
-                && x < base_x + ARROW_WIDTH
-                && y >= base_y
-                && y < base_y + ARROW_HEIGHT
-            {
-                return Some(position);
-            }
-        }
-    }
-
-    None
-}
 
 /// Which button is selected in a confirm dialog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -732,30 +626,15 @@ impl Widget for CockpitWidget<'_> {
 
                 // Render up arrow on expanded panes
                 if idx < 4 && expanded_positions[idx] {
-                    // Up arrow design (5 wide x 3 tall):
-                    //     ^
-                    //    ╱ ╲
-                    //   ╱   ╲
                     let arrow_style = Style::default().fg(Color::White);
-                    let arrow_lines: [&[char]; 3] = [
-                        &[' ', ' ', '^', ' ', ' '],
-                        &[' ', '╱', ' ', '╲', ' '],
-                        &['╱', ' ', ' ', ' ', '╲'],
-                    ];
-                    let arrow_width: u16 = 5;
-                    let arrow_height: u16 = 3;
-
-                    let base_y = pane_area.y + pane_area.height - 1 - arrow_height;
-
-                    // Position 0 and 2: bottom-left, Position 1 and 3: bottom-right
-                    let is_left = idx == 0 || idx == 2;
-                    let base_x = if is_left {
+                    let base_y = pane_area.y + pane_area.height - 1 - ARROW_HEIGHT;
+                    let base_x = if is_left_arrow_position(idx) {
                         pane_area.x + 1
                     } else {
-                        pane_area.x + pane_area.width - 1 - arrow_width
+                        pane_area.x + pane_area.width - 1 - ARROW_WIDTH
                     };
 
-                    for (row, line) in arrow_lines.iter().enumerate() {
+                    for (row, line) in UP_ARROW.iter().enumerate() {
                         let y = base_y + row as u16;
                         if y >= buf.area.y + buf.area.height {
                             continue;
@@ -879,69 +758,36 @@ impl Widget for CockpitWidget<'_> {
                 paragraph.render(centered_area, buf);
             }
 
-            // Render big ASCII art down arrows for overlay navigation in lower corners
+            // Render down arrows for overlay navigation
             // 111 (idx 0): bottom-left, 122 (idx 3): bottom-right
             // 211 (idx 4): bottom-left, 222 (idx 7): bottom-right
-            //
-            // Arrow design (5 wide x 3 tall):
-            //   ╲   ╱
-            //    ╲ ╱
-            //     V
             let arrow_style = Style::default().fg(Color::White);
-            let arrow_lines: [&[char]; 3] = [
-                &['╲', ' ', ' ', ' ', '╱'],
-                &[' ', '╲', ' ', '╱', ' '],
-                &[' ', ' ', 'V', ' ', ' '],
-            ];
-            let arrow_width = 5;
-            let arrow_height = 3;
+            let base_y = sub_area.y + sub_area.height - 1 - ARROW_HEIGHT;
 
-            let base_y = sub_area.y + sub_area.height - 1 - arrow_height; // Position above bottom border
+            let base_x = match idx {
+                0 | 4 => Some(sub_area.x + 1), // Bottom-left
+                3 | 7 => Some(sub_area.x + sub_area.width - 1 - ARROW_WIDTH), // Bottom-right
+                _ => None,
+            };
 
-            match idx {
-                0 | 4 => {
-                    // Bottom-left corner on 111 and 211
-                    let base_x = sub_area.x + 1; // One column inside left border
-                    for (row, line) in arrow_lines.iter().enumerate() {
-                        let y = base_y + row as u16;
-                        if y >= buf.area.y + buf.area.height {
+            if let Some(base_x) = base_x {
+                for (row, line) in DOWN_ARROW.iter().enumerate() {
+                    let y = base_y + row as u16;
+                    if y >= buf.area.y + buf.area.height {
+                        continue;
+                    }
+                    for (col, &ch) in line.iter().enumerate() {
+                        let x = base_x + col as u16;
+                        if x < buf.area.x || x >= buf.area.x + buf.area.width {
                             continue;
                         }
-                        for (col, &ch) in line.iter().enumerate() {
-                            let x = base_x + col as u16;
-                            if x >= buf.area.x + buf.area.width {
-                                continue;
-                            }
-                            if ch != ' ' {
-                                let cell = &mut buf[(x, y)];
-                                cell.set_char(ch);
-                                cell.set_style(arrow_style);
-                            }
+                        if ch != ' ' {
+                            let cell = &mut buf[(x, y)];
+                            cell.set_char(ch);
+                            cell.set_style(arrow_style);
                         }
                     }
                 }
-                3 | 7 => {
-                    // Bottom-right corner on 122 and 222
-                    let base_x = sub_area.x + sub_area.width - 1 - arrow_width; // Inside right border
-                    for (row, line) in arrow_lines.iter().enumerate() {
-                        let y = base_y + row as u16;
-                        if y >= buf.area.y + buf.area.height {
-                            continue;
-                        }
-                        for (col, &ch) in line.iter().enumerate() {
-                            let x = base_x + col as u16;
-                            if x < buf.area.x || x >= buf.area.x + buf.area.width {
-                                continue;
-                            }
-                            if ch != ' ' {
-                                let cell = &mut buf[(x, y)];
-                                cell.set_char(ch);
-                                cell.set_style(arrow_style);
-                            }
-                        }
-                    }
-                }
-                _ => {}
             }
         }
     }

@@ -16,7 +16,7 @@ use crate::pane::{PaneHandle, PaneId, PaneSize, SpawnConfig};
 use crate::plugins::{Plugin, PluginId, PluginRegistry, PluginResult};
 use crate::pty::{self, PaneEvent, SpawnedPty};
 use crate::status_bar::StatusBarSegment;
-use crate::widget::{arrow_at_position, up_arrow_at_position};
+use crate::arrows::{down_arrow_at_position, up_arrow_at_position};
 
 /// Configuration for the pane manager.
 #[derive(Clone, Debug)]
@@ -609,7 +609,7 @@ impl PaneManager {
         }
 
         // Then check for down arrow clicks on sub-panes (expand)
-        if let Some(arrow) = arrow_at_position(x, y, &self.sub_pane_areas) {
+        if let Some(arrow) = down_arrow_at_position(x, y, &self.sub_pane_areas) {
             self.toggle_pane_expansion(arrow.pane_position());
             return true;
         }

@@ -332,7 +332,7 @@ impl<'a> PaneWidget<'a> {
     }
 
     /// Create a default block for the pane.
-    fn default_block(&self, title: &str) -> Block<'a> {
+    fn default_block(&self) -> Block<'a> {
         let style = if self.focused {
             self.focus_style
         } else {
@@ -342,7 +342,6 @@ impl<'a> PaneWidget<'a> {
         Block::default()
             .borders(Borders::ALL)
             .border_style(style)
-            .title(title.to_string())
     }
 }
 
@@ -353,10 +352,9 @@ impl Widget for PaneWidget<'_> {
         let vt_screen = screen.screen();
 
         // Determine the block to use
-        let pane_title = format!("Pane {}", self.handle.id());
         let block = match self.block {
             Some(b) => b,
-            None => self.default_block(&pane_title),
+            None => self.default_block(),
         };
 
         // Render block and get inner area
@@ -554,8 +552,7 @@ impl Widget for CockpitWidget<'_> {
 
                 let block = Block::default()
                     .borders(Borders::ALL)
-                    .border_style(border_style)
-                    .title(format!("Pane {pane_id}"));
+                    .border_style(border_style);
 
                 let widget = PaneWidget::new(handle)
                     .focused(is_focused)

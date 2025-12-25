@@ -95,6 +95,9 @@ pub(crate) fn spawn_pty(
     // Spawn the child process
     let child = pty_pair.slave.spawn_command(cmd)?;
 
+    // Get the child PID before moving ownership
+    let child_pid = child.process_id();
+
     // Create vt100 parser for terminal emulation
     let parser = vt100::Parser::new(config.size.rows, config.size.cols, config.scrollback);
     let screen = Arc::new(RwLock::new(parser));
@@ -118,7 +121,7 @@ pub(crate) fn spawn_pty(
     let monitor_handle = spawn_monitor_task(pane_id, child, state_tx, event_tx);
 
     // Create pane handle
-    let handle = PaneHandle::new(pane_id, input_tx, state_rx, screen);
+    let handle = PaneHandle::new(pane_id, child_pid, input_tx, state_rx, screen);
 
     Ok(SpawnedPty {
         handle,

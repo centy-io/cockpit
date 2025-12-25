@@ -277,6 +277,9 @@ pub struct PaneHandle {
     /// Pane ID.
     id: PaneId,
 
+    /// Child process ID.
+    child_pid: Option<u32>,
+
     /// Channel to send input to the pane.
     input_tx: mpsc::Sender<Vec<u8>>,
 
@@ -294,12 +297,14 @@ impl PaneHandle {
     /// Create a new pane handle.
     pub(crate) fn new(
         id: PaneId,
+        child_pid: Option<u32>,
         input_tx: mpsc::Sender<Vec<u8>>,
         state_rx: watch::Receiver<PaneState>,
         screen: Arc<RwLock<vt100::Parser>>,
     ) -> Self {
         Self {
             id,
+            child_pid,
             input_tx,
             state_rx,
             screen,
@@ -311,6 +316,12 @@ impl PaneHandle {
     #[must_use]
     pub fn id(&self) -> PaneId {
         self.id
+    }
+
+    /// Get the child process ID.
+    #[must_use]
+    pub fn pid(&self) -> Option<u32> {
+        self.child_pid
     }
 
     /// Send input bytes to the pane's PTY.

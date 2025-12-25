@@ -42,7 +42,44 @@ impl ArrowPosition {
 const ARROW_WIDTH: u16 = 5;
 const ARROW_HEIGHT: u16 = 3;
 
-/// Check if a click at (x, y) hits any of the navigation arrows.
+/// Check if a click at (x, y) hits any up arrow on expanded panes.
+/// Returns the pane position (0-3) if an up arrow was clicked, None otherwise.
+#[must_use]
+pub fn up_arrow_at_position(
+    x: u16,
+    y: u16,
+    pane_areas: &[(PaneId, Rect)],
+    expanded_positions: &[bool; 4],
+) -> Option<usize> {
+    for (idx, (_, pane_area)) in pane_areas.iter().enumerate() {
+        if idx >= 4 || !expanded_positions[idx] {
+            continue;
+        }
+
+        let base_y = pane_area.y + pane_area.height.saturating_sub(1 + ARROW_HEIGHT);
+
+        // Position 0 and 2: bottom-left, Position 1 and 3: bottom-right
+        let is_left = idx == 0 || idx == 2;
+        let base_x = if is_left {
+            pane_area.x + 1
+        } else {
+            pane_area.x + pane_area.width.saturating_sub(1 + ARROW_WIDTH)
+        };
+
+        // Check if click is within arrow bounds
+        if x >= base_x
+            && x < base_x + ARROW_WIDTH
+            && y >= base_y
+            && y < base_y + ARROW_HEIGHT
+        {
+            return Some(idx);
+        }
+    }
+
+    None
+}
+
+/// Check if a click at (x, y) hits any of the navigation arrows (down arrows on sub-panes).
 /// Returns the arrow position if clicked, None otherwise.
 #[must_use]
 pub fn arrow_at_position(x: u16, y: u16, sub_pane_areas: &[Rect]) -> Option<ArrowPosition> {
@@ -591,6 +628,20 @@ impl<'a> CockpitWidget<'a> {
         }
     }
 
+    /// Infer which pane positions are expanded from sub_pane_areas.
+    /// A position is expanded if its sub-panes have zero size.
+    fn infer_expanded_positions(&self) -> [bool; 4] {
+        let mut expanded = [false; 4];
+        // Sub-pane indices: 0-1 for position 0, 2-3 for position 1, 4-5 for position 2, 6-7 for position 3
+        for position in 0..4 {
+            let first_idx = position * 2;
+            if let Some(sub_area) = self.sub_pane_areas.get(first_idx) {
+                expanded[position] = sub_area.width == 0 || sub_area.height == 0;
+            }
+        }
+        expanded
+    }
+
     /// Set the focus style.
     #[must_use]
     pub fn focus_style(mut self, style: Style) -> Self {
@@ -637,6 +688,9 @@ impl<'a> CockpitWidget<'a> {
 
 impl Widget for CockpitWidget<'_> {
     fn render(self, _area: Rect, buf: &mut Buffer) {
+        // Infer which positions are expanded from sub_pane_areas
+        let expanded_positions = self.infer_expanded_positions();
+
         // Pane labels: positions 1-4 (panes) and 5-12 (sub-panes)
         const PANE_LABELS: [&str; 4] = ["110", "120", "210", "220"];
         const SUB_PANE_LABELS: [&str; 8] = ["111", "112", "121", "122", "211", "212", "221", "222"];
@@ -645,8 +699,12 @@ impl Widget for CockpitWidget<'_> {
         let pane_map: std::collections::HashMap<_, _> =
             self.panes.iter().map(|(id, h)| (*id, *h)).collect();
 
+        // Sort areas by x coordinate to get correct position order (left to right)
+        let mut sorted_areas: Vec<_> = self.areas.iter().collect();
+        sorted_areas.sort_by_key(|(_, rect)| rect.x);
+
         // Render each pane in its area
-        for (idx, (pane_id, pane_area)) in self.areas.iter().enumerate() {
+        for (idx, (pane_id, pane_area)) in sorted_areas.iter().enumerate() {
             if let Some(handle) = pane_map.get(pane_id) {
                 let is_focused = self.focused == Some(*pane_id);
                 let border_style = if is_focused {
@@ -671,6 +729,50 @@ impl Widget for CockpitWidget<'_> {
                     .focus_style(self.focus_style);
 
                 widget.render(*pane_area, buf);
+
+                // Render up arrow on expanded panes
+                if idx < 4 && expanded_positions[idx] {
+                    // Up arrow design (5 wide x 3 tall):
+                    //     ^
+                    //    ╱ ╲
+                    //   ╱   ╲
+                    let arrow_style = Style::default().fg(Color::White);
+                    let arrow_lines: [&[char]; 3] = [
+                        &[' ', ' ', '^', ' ', ' '],
+                        &[' ', '╱', ' ', '╲', ' '],
+                        &['╱', ' ', ' ', ' ', '╲'],
+                    ];
+                    let arrow_width: u16 = 5;
+                    let arrow_height: u16 = 3;
+
+                    let base_y = pane_area.y + pane_area.height - 1 - arrow_height;
+
+                    // Position 0 and 2: bottom-left, Position 1 and 3: bottom-right
+                    let is_left = idx == 0 || idx == 2;
+                    let base_x = if is_left {
+                        pane_area.x + 1
+                    } else {
+                        pane_area.x + pane_area.width - 1 - arrow_width
+                    };
+
+                    for (row, line) in arrow_lines.iter().enumerate() {
+                        let y = base_y + row as u16;
+                        if y >= buf.area.y + buf.area.height {
+                            continue;
+                        }
+                        for (col, &ch) in line.iter().enumerate() {
+                            let x = base_x + col as u16;
+                            if x < buf.area.x || x >= buf.area.x + buf.area.width {
+                                continue;
+                            }
+                            if ch != ' ' {
+                                let cell = &mut buf[(x, y)];
+                                cell.set_char(ch);
+                                cell.set_style(arrow_style);
+                            }
+                        }
+                    }
+                }
 
                 // Show PID or label as centered content
                 if self.show_numbers {

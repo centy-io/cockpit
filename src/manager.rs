@@ -16,7 +16,7 @@ use crate::pane::{PaneHandle, PaneId, PaneSize, SpawnConfig};
 use crate::plugins::{Plugin, PluginId, PluginRegistry, PluginResult};
 use crate::pty::{self, PaneEvent, SpawnedPty};
 use crate::status_bar::StatusBarSegment;
-use crate::widget::arrow_at_position;
+use crate::widget::{arrow_at_position, up_arrow_at_position};
 
 /// Configuration for the pane manager.
 #[derive(Clone, Debug)]
@@ -595,12 +595,20 @@ impl PaneManager {
     /// Handle a mouse click at the given screen coordinates.
     ///
     /// This is the unified click handler that:
-    /// 1. First checks if clicking a navigation arrow → toggles pane expansion
-    /// 2. Otherwise checks if clicking a pane → changes focus
+    /// 1. First checks if clicking an up arrow on expanded pane → collapses pane
+    /// 2. Then checks if clicking a down arrow on sub-pane → expands pane
+    /// 3. Otherwise checks if clicking a pane → changes focus
     ///
     /// Returns `true` if any action was taken (expansion toggled or focus changed).
     pub fn handle_click(&mut self, x: u16, y: u16) -> bool {
-        // First check for arrow clicks (expansion toggle)
+        // First check for up arrow clicks on expanded panes (collapse)
+        let areas_vec: Vec<_> = self.cached_areas.iter().map(|(&id, &rect)| (id, rect)).collect();
+        if let Some(position) = up_arrow_at_position(x, y, &areas_vec, &self.expanded_positions) {
+            self.toggle_pane_expansion(position);
+            return true;
+        }
+
+        // Then check for down arrow clicks on sub-panes (expand)
         if let Some(arrow) = arrow_at_position(x, y, &self.sub_pane_areas) {
             self.toggle_pane_expansion(arrow.pane_position());
             return true;

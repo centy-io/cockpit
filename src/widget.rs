@@ -8,7 +8,10 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
 
-use crate::arrows::{is_left_arrow_position, ARROW_HEIGHT, ARROW_WIDTH, DOWN_ARROW, UP_ARROW};
+use crate::arrows::{
+    is_left_arrow_position, ARROW_HEIGHT, ARROW_WIDTH, DOWN_ARROW, LEFT_ARROW, RIGHT_ARROW,
+    UP_ARROW,
+};
 use crate::pane::{PaneHandle, PaneId, ScreenColor};
 
 /// Which button is selected in a confirm dialog.
@@ -534,6 +537,38 @@ impl<'a> CockpitWidget<'a> {
         expanded
     }
 
+    /// Infer horizontal expansion state from sub_pane_areas.
+    /// Returns [Option<bool>; 2] where:
+    /// - Index 0 = top row (positions 0,1), Index 1 = bottom row (positions 2,3)
+    /// - None = no horizontal expansion
+    /// - Some(true) = left pane expanded (right pane hidden)
+    /// - Some(false) = right pane expanded (left pane hidden)
+    fn infer_horizontal_expanded(&self) -> [Option<bool>; 2] {
+        let mut h_expanded = [None; 2];
+
+        for row in 0..2 {
+            let left_idx = row * 4; // 0 for row 0, 4 for row 1
+            let right_idx = row * 4 + 2; // 2 for row 0, 6 for row 1
+
+            let left_visible = self
+                .sub_pane_areas
+                .get(left_idx)
+                .is_some_and(|r| r.width > 0 && r.height > 0);
+            let right_visible = self
+                .sub_pane_areas
+                .get(right_idx)
+                .is_some_and(|r| r.width > 0 && r.height > 0);
+
+            h_expanded[row] = match (left_visible, right_visible) {
+                (true, false) => Some(true),  // Left expanded, right hidden
+                (false, true) => Some(false), // Right expanded, left hidden
+                _ => None,                    // Both visible or both hidden
+            };
+        }
+
+        h_expanded
+    }
+
     /// Set the focus style.
     #[must_use]
     pub fn focus_style(mut self, style: Style) -> Self {
@@ -582,6 +617,7 @@ impl Widget for CockpitWidget<'_> {
     fn render(self, _area: Rect, buf: &mut Buffer) {
         // Infer which positions are expanded from sub_pane_areas
         let expanded_positions = self.infer_expanded_positions();
+        let horizontal_expanded = self.infer_horizontal_expanded();
 
         // Pane labels: positions 1-4 (panes) and 5-12 (sub-panes)
         const PANE_LABELS: [&str; 4] = ["110", "120", "210", "220"];
@@ -776,6 +812,59 @@ impl Widget for CockpitWidget<'_> {
                     }
                     for (col, &ch) in line.iter().enumerate() {
                         let x = base_x + col as u16;
+                        if x < buf.area.x || x >= buf.area.x + buf.area.width {
+                            continue;
+                        }
+                        if ch != ' ' {
+                            let cell = &mut buf[(x, y)];
+                            cell.set_char(ch);
+                            cell.set_style(arrow_style);
+                        }
+                    }
+                }
+            }
+
+            // Render horizontal arrows for left/right navigation
+            // Arrow direction depends on horizontal expansion state:
+            // - Normal: 112/212 show RIGHT, 121/221 show LEFT
+            // - Left expanded: 112/212 show LEFT (to collapse)
+            // - Right expanded: 121/221 show RIGHT (to collapse)
+            let row = idx / 4; // Row 0 = indices 0-3, Row 1 = indices 4-7
+            let h_exp = horizontal_expanded[row];
+
+            let horizontal_arrow: Option<(&[[char; 5]; 3], u16)> = match idx {
+                1 | 5 => {
+                    // Sub-pane 112 or 212 (inner-left, normally shows RIGHT arrow)
+                    let arrow = if h_exp == Some(true) {
+                        &LEFT_ARROW // When left expanded, show LEFT to collapse
+                    } else {
+                        &RIGHT_ARROW
+                    };
+                    Some((
+                        arrow,
+                        sub_area.x + sub_area.width.saturating_sub(1 + ARROW_WIDTH),
+                    ))
+                }
+                2 | 6 => {
+                    // Sub-pane 121 or 221 (inner-right, normally shows LEFT arrow)
+                    let arrow = if h_exp == Some(false) {
+                        &RIGHT_ARROW // When right expanded, show RIGHT to collapse
+                    } else {
+                        &LEFT_ARROW
+                    };
+                    Some((arrow, sub_area.x + 1))
+                }
+                _ => None,
+            };
+
+            if let Some((arrow, h_base_x)) = horizontal_arrow {
+                for (row, line) in arrow.iter().enumerate() {
+                    let y = base_y + row as u16;
+                    if y >= buf.area.y + buf.area.height {
+                        continue;
+                    }
+                    for (col, &ch) in line.iter().enumerate() {
+                        let x = h_base_x + col as u16;
                         if x < buf.area.x || x >= buf.area.x + buf.area.width {
                             continue;
                         }

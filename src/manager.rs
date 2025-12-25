@@ -10,7 +10,7 @@ use ratatui::layout::Rect;
 use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
 
-use crate::arrows::{down_arrow_at_position, up_arrow_at_position};
+use crate::arrows::{down_arrow_at_position, horizontal_arrow_at_position, up_arrow_at_position};
 use crate::error::{Error, Result};
 use crate::layout::{Layout, LayoutCalculator};
 use crate::pane::{PaneHandle, PaneId, PaneSize, SpawnConfig};
@@ -85,6 +85,10 @@ pub struct PaneManager {
     empty_pane_areas: Vec<(usize, Rect)>,
     /// Which pane positions (0-3) are expanded (hiding their sub-panes).
     expanded_positions: [bool; 4],
+    /// Horizontal expansion state per row.
+    /// Index 0 = top row (110/120), Index 1 = bottom row (210/220).
+    /// None = no expansion, Some(true) = left expanded, Some(false) = right expanded.
+    horizontal_expanded: [Option<bool>; 2],
 }
 
 impl PaneManager {
@@ -119,6 +123,7 @@ impl PaneManager {
             sub_pane_ratio: 0.7,
             empty_pane_areas: Vec::new(),
             expanded_positions: [false; 4],
+            horizontal_expanded: [None; 2],
         }
     }
 
@@ -281,6 +286,28 @@ impl PaneManager {
         }
     }
 
+    /// Toggle horizontal expansion for a row.
+    /// - row 0 = top row (panes 110/120)
+    /// - row 1 = bottom row (panes 210/220)
+    /// - expand_left = true means left pane expands, false means right pane expands
+    pub fn toggle_horizontal_expansion(&mut self, row: usize, expand_left: bool) {
+        if row < 2 {
+            let current = self.horizontal_expanded[row];
+            self.horizontal_expanded[row] = match current {
+                None => Some(expand_left),
+                Some(was_left) if was_left == expand_left => None, // Toggle off
+                Some(_) => Some(expand_left),                      // Switch direction
+            };
+            self.recalculate_layout();
+            let _ = self.resize_all_panes();
+        }
+    }
+
+    /// Get horizontal expansion state.
+    pub fn get_horizontal_expanded(&self) -> &[Option<bool>; 2] {
+        &self.horizontal_expanded
+    }
+
     /// Recalculate layout based on current panes and terminal size.
     /// Always calculates 4 pane areas (2x2 grid) for consistent 12-pane layout.
     fn recalculate_layout(&mut self) {
@@ -303,48 +330,67 @@ impl PaneManager {
 
         // Always calculate 4 areas in a horizontal row (side by side)
         let quarter_width = full_area.width / 4;
+        let half_width = full_area.width / 2;
 
-        // Calculate all 4 pane slot areas (positions 1-4, left to right)
+        // Calculate widths based on horizontal expansion state
+        // Row 0 = positions 0,1 (panes 110,120), Row 1 = positions 2,3 (panes 210,220)
+        let (width_0, width_1) = match self.horizontal_expanded[0] {
+            None => (quarter_width, quarter_width),
+            Some(true) => (half_width, 0),  // Left expanded
+            Some(false) => (0, half_width), // Right expanded
+        };
+        let (width_2, width_3) = match self.horizontal_expanded[1] {
+            None => (quarter_width, full_area.width - quarter_width * 3), // Account for rounding
+            Some(true) => (half_width, 0),                                // Left expanded
+            Some(false) => (0, half_width),                               // Right expanded
+        };
+
+        // Calculate x positions based on widths
+        let x_1 = full_area.x + width_0;
+        let x_2 = full_area.x + half_width;
+        let x_3 = full_area.x + half_width + width_2;
+
+        // Calculate all 4 pane slot areas (positions 0-3, left to right)
         // Expanded panes get full height, others get panes_height
         let all_areas: [Rect; 4] = [
-            // Position 0: leftmost
+            // Position 0: leftmost (pane 110)
             Rect {
                 x: full_area.x,
                 y: full_area.y,
-                width: quarter_width,
+                width: width_0,
                 height: if self.expanded_positions[0] {
                     full_area.height
                 } else {
                     panes_height
                 },
             },
-            // Position 1: second from left
+            // Position 1: second from left (pane 120)
             Rect {
-                x: full_area.x + quarter_width,
+                x: x_1,
                 y: full_area.y,
-                width: quarter_width,
+                width: width_1,
                 height: if self.expanded_positions[1] {
                     full_area.height
                 } else {
                     panes_height
                 },
             },
-            // Position 2: third from left
+            // Position 2: third from left (pane 210)
             Rect {
-                x: full_area.x + quarter_width * 2,
+                x: x_2,
                 y: full_area.y,
-                width: quarter_width,
+                width: width_2,
                 height: if self.expanded_positions[2] {
                     full_area.height
                 } else {
                     panes_height
                 },
             },
-            // Position 3: rightmost (takes remaining width to handle rounding)
+            // Position 3: rightmost (pane 220)
             Rect {
-                x: full_area.x + quarter_width * 3,
+                x: x_3,
                 y: full_area.y,
-                width: full_area.width - quarter_width * 3,
+                width: width_3,
                 height: if self.expanded_positions[3] {
                     full_area.height
                 } else {
@@ -408,24 +454,69 @@ impl PaneManager {
 
         // 8 sub-pane slots total (2 per pane position)
         // Sub-pane indices: 0-1 for position 0, 2-3 for position 1, 4-5 for position 2, 6-7 for position 3
-        let pane_width = area.width / 8;
+        let quarter_width = area.width / 4;
+        let half_width = area.width / 2;
+        let eighth_width = area.width / 8;
 
         for i in 0..8 {
             let position = i / 2; // Which pane position (0-3) this sub-pane belongs to
+            let row = position / 2; // Row 0 = positions 0,1; Row 1 = positions 2,3
 
-            // Skip sub-panes for expanded positions
+            // Skip sub-panes for vertically expanded positions
             if self.expanded_positions[position] {
-                // Push empty rect as placeholder to maintain indices
                 self.sub_pane_areas.push(Rect::default());
                 continue;
             }
 
-            let x = area.x + (i as u16 * pane_width);
-            // Handle last pane width to account for rounding
-            let width = if i == 7 {
-                area.width - (7 * pane_width)
-            } else {
-                pane_width
+            // Check horizontal expansion for this row
+            let h_expanded = self.horizontal_expanded[row];
+
+            // Determine if this sub-pane should be hidden due to horizontal expansion
+            let is_hidden = match h_expanded {
+                None => false,
+                Some(true) => position == 1 || position == 3, // Right panes hidden
+                Some(false) => position == 0 || position == 2, // Left panes hidden
+            };
+
+            if is_hidden {
+                self.sub_pane_areas.push(Rect::default());
+                continue;
+            }
+
+            // Calculate width and x position based on horizontal expansion
+            let (x, width) = match h_expanded {
+                None => {
+                    // Normal layout: 8 sub-panes, each 1/8 width
+                    let x = area.x + (i as u16 * eighth_width);
+                    let width = if i == 7 {
+                        area.width - (7 * eighth_width)
+                    } else {
+                        eighth_width
+                    };
+                    (x, width)
+                }
+                Some(true) => {
+                    // Left pane expanded: sub-panes 0-1 or 4-5 take 1/4 each (total 1/2)
+                    let local_idx = i % 2; // 0 or 1 within the pair
+                    let base_x = if row == 0 {
+                        area.x
+                    } else {
+                        area.x + half_width
+                    };
+                    let x = base_x + (local_idx as u16 * quarter_width);
+                    (x, quarter_width)
+                }
+                Some(false) => {
+                    // Right pane expanded: sub-panes 2-3 or 6-7 take 1/4 each (total 1/2)
+                    let local_idx = i % 2; // 0 or 1 within the pair
+                    let base_x = if row == 0 {
+                        area.x
+                    } else {
+                        area.x + half_width
+                    };
+                    let x = base_x + (local_idx as u16 * quarter_width);
+                    (x, quarter_width)
+                }
             };
 
             self.sub_pane_areas.push(Rect {
@@ -617,6 +708,15 @@ impl PaneManager {
         // Then check for down arrow clicks on sub-panes (expand)
         if let Some(arrow) = down_arrow_at_position(x, y, &self.sub_pane_areas) {
             self.toggle_pane_expansion(arrow.pane_position());
+            return true;
+        }
+
+        // Check for horizontal arrow clicks (horizontal pane expansion)
+        if let Some(arrow) = horizontal_arrow_at_position(x, y, &self.sub_pane_areas) {
+            let source_position = arrow.source_position();
+            let row = source_position / 2; // Row 0 = top, Row 1 = bottom
+            let expand_left = source_position % 2 == 0; // Even positions are left panes
+            self.toggle_horizontal_expansion(row, expand_left);
             return true;
         }
 

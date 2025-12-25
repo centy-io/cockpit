@@ -55,7 +55,7 @@ mod status_bar;
 mod widget;
 
 // Re-export public API
-pub use arrows::ArrowPosition;
+pub use arrows::{ArrowPosition, HorizontalArrowPosition};
 pub use error::{Error, Result};
 pub use manager::{ManagerConfig, PaneManager};
 pub use pane::{

@@ -8,9 +8,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
 
-use crate::arrows::{
-    is_left_arrow_position, ARROW_HEIGHT, ARROW_WIDTH, DOWN_ARROW, UP_ARROW,
-};
+use crate::arrows::{is_left_arrow_position, ARROW_HEIGHT, ARROW_WIDTH, DOWN_ARROW, UP_ARROW};
 use crate::pane::{PaneHandle, PaneId, ScreenColor};
 
 /// Which button is selected in a confirm dialog.

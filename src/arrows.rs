@@ -89,11 +89,7 @@ pub fn up_arrow_at_position(
         };
 
         // Check if click is within arrow bounds
-        if x >= base_x
-            && x < base_x + ARROW_WIDTH
-            && y >= base_y
-            && y < base_y + ARROW_HEIGHT
-        {
+        if x >= base_x && x < base_x + ARROW_WIDTH && y >= base_y && y < base_y + ARROW_HEIGHT {
             return Some(idx);
         }
     }
@@ -127,11 +123,7 @@ pub fn down_arrow_at_position(x: u16, y: u16, sub_pane_areas: &[Rect]) -> Option
             };
 
             // Check if click is within arrow bounds
-            if x >= base_x
-                && x < base_x + ARROW_WIDTH
-                && y >= base_y
-                && y < base_y + ARROW_HEIGHT
-            {
+            if x >= base_x && x < base_x + ARROW_WIDTH && y >= base_y && y < base_y + ARROW_HEIGHT {
                 return Some(position);
             }
         }

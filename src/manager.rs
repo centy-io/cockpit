@@ -10,13 +10,13 @@ use ratatui::layout::Rect;
 use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
 
+use crate::arrows::{down_arrow_at_position, up_arrow_at_position};
 use crate::error::{Error, Result};
 use crate::layout::{Layout, LayoutCalculator};
 use crate::pane::{PaneHandle, PaneId, PaneSize, SpawnConfig};
 use crate::plugins::{Plugin, PluginId, PluginRegistry, PluginResult};
 use crate::pty::{self, PaneEvent, SpawnedPty};
 use crate::status_bar::StatusBarSegment;
-use crate::arrows::{down_arrow_at_position, up_arrow_at_position};
 
 /// Configuration for the pane manager.
 #[derive(Clone, Debug)]
@@ -602,7 +602,13 @@ impl PaneManager {
     /// Returns `true` if any action was taken (expansion toggled or focus changed).
     pub fn handle_click(&mut self, x: u16, y: u16) -> bool {
         // First check for up arrow clicks on expanded panes (collapse)
-        let areas_vec: Vec<_> = self.cached_areas.iter().map(|(&id, &rect)| (id, rect)).collect();
+        // Sort by x coordinate to ensure consistent position ordering (0-3 = left to right)
+        let mut areas_vec: Vec<_> = self
+            .cached_areas
+            .iter()
+            .map(|(&id, &rect)| (id, rect))
+            .collect();
+        areas_vec.sort_by_key(|(_, rect)| rect.x);
         if let Some(position) = up_arrow_at_position(x, y, &areas_vec, &self.expanded_positions) {
             self.toggle_pane_expansion(position);
             return true;

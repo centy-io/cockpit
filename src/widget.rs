@@ -554,6 +554,10 @@ impl<'a> CockpitWidget<'a> {
 
 impl Widget for CockpitWidget<'_> {
     fn render(self, _area: Rect, buf: &mut Buffer) {
+        // Panel labels: positions 1-4 (panes) and 5-12 (sub-panels)
+        const PANE_LABELS: [&str; 4] = ["110", "120", "210", "220"];
+        const SUB_PANEL_LABELS: [&str; 8] = ["111", "112", "121", "122", "211", "212", "221", "222"];
+
         // Create a lookup for pane handles
         let pane_map: std::collections::HashMap<_, _> =
             self.panes.iter().map(|(id, h)| (*id, *h)).collect();
@@ -579,11 +583,11 @@ impl Widget for CockpitWidget<'_> {
 
                 widget.render(*pane_area, buf);
 
-                // Show number as centered content (rendered after pane, so visible initially)
+                // Show label as centered content
                 if self.show_numbers {
                     let inner = Block::default().borders(Borders::ALL).inner(*pane_area);
-                    let number = format!("{}", idx + 1);
-                    let paragraph = Paragraph::new(number)
+                    let label = PANE_LABELS.get(idx).unwrap_or(&"");
+                    let paragraph = Paragraph::new(*label)
                         .alignment(Alignment::Center)
                         .style(Style::default().fg(Color::DarkGray));
                     let centered_area = Rect {
@@ -605,10 +609,10 @@ impl Widget for CockpitWidget<'_> {
             let inner = block.inner(*empty_area);
             block.render(*empty_area, buf);
 
-            // Show number as centered content
+            // Show label as centered content
             if self.show_numbers {
-                let number = format!("{}", panel_number);
-                let paragraph = Paragraph::new(number)
+                let label = PANE_LABELS.get(panel_number - 1).unwrap_or(&"");
+                let paragraph = Paragraph::new(*label)
                     .alignment(Alignment::Center)
                     .style(Style::default().fg(Color::DarkGray));
                 let centered_area = Rect {
@@ -629,10 +633,10 @@ impl Widget for CockpitWidget<'_> {
             let inner = block.inner(*sub_area);
             block.render(*sub_area, buf);
 
-            // Show number as centered content
+            // Show label as centered content
             if self.show_numbers {
-                let number = format!("{}", idx + 5);
-                let paragraph = Paragraph::new(number)
+                let label = SUB_PANEL_LABELS.get(idx).unwrap_or(&"");
+                let paragraph = Paragraph::new(*label)
                     .alignment(Alignment::Center)
                     .style(Style::default().fg(Color::DarkGray));
                 let centered_area = Rect {

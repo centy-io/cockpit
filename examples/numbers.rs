@@ -1,23 +1,22 @@
-//! Basic example demonstrating cockpit's terminal multiplexer functionality.
+//! Numbers example - displays panel numbers without spawning terminals.
 //!
-//! Run with: cargo run --example basic
+//! Run with: cargo run --example numbers
+//!
+//! Shows all 12 panels with their labels (110, 120, 210, 220, 111-222).
+//! No terminal panes are spawned.
 //!
 //! Controls:
-//! - Ctrl+C (twice): Open exit confirmation dialog
-//! - Ctrl+Q: Quit immediately
-//! - Ctrl+N: Focus next pane
-//! - Mouse click: Focus pane under cursor
-//! - All other input goes to the focused pane
+//! - Ctrl+Q: Quit
 //!
 //! Layout:
-//! - 4 PTY panes on top (2 groups of 2)
-//! - 8 empty sub-panels below (2 per pane)
+//! - 4 empty panes on top (110, 120, 210, 220)
+//! - 8 sub-panels below (111, 112, 121, 122, 211, 212, 221, 222)
 
 use std::io::{self, stdout};
 use std::time::{Duration, Instant};
 
 use cockpit::{
-    CockpitWidget, ConfirmDialog, DialogState, GitUserPlugin, PaneManager, SpawnConfig,
+    CockpitWidget, ConfirmDialog, DialogState, GitUserPlugin, PaneManager,
     StatusBarWidget, STATUS_BAR_HEIGHT,
 };
 use crossterm::{

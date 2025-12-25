@@ -490,6 +490,10 @@ pub struct CockpitWidget<'a> {
     unfocus_style: Style,
     /// Sub-panel areas for rendering.
     sub_panel_areas: &'a [Rect],
+    /// Empty pane areas (panel_number, Rect) for slots without active PTYs.
+    empty_pane_areas: &'a [(usize, Rect)],
+    /// Whether to show panel numbers (1-12) in borders.
+    show_numbers: bool,
 }
 
 impl<'a> CockpitWidget<'a> {
@@ -507,6 +511,8 @@ impl<'a> CockpitWidget<'a> {
             focus_style: Style::default().fg(Color::Cyan),
             unfocus_style: Style::default().fg(Color::DarkGray),
             sub_panel_areas: &[],
+            empty_pane_areas: &[],
+            show_numbers: false,
         }
     }
 
@@ -530,6 +536,20 @@ impl<'a> CockpitWidget<'a> {
         self.sub_panel_areas = areas;
         self
     }
+
+    /// Set empty pane areas to render (slots without active PTYs).
+    #[must_use]
+    pub fn empty_panes(mut self, areas: &'a [(usize, Rect)]) -> Self {
+        self.empty_pane_areas = areas;
+        self
+    }
+
+    /// Enable panel numbering (1-12) in borders.
+    #[must_use]
+    pub fn show_numbers(mut self, show: bool) -> Self {
+        self.show_numbers = show;
+        self
+    }
 }
 
 impl Widget for CockpitWidget<'_> {
@@ -539,7 +559,7 @@ impl Widget for CockpitWidget<'_> {
             self.panes.iter().map(|(id, h)| (*id, *h)).collect();
 
         // Render each pane in its area
-        for (pane_id, pane_area) in self.areas {
+        for (idx, (pane_id, pane_area)) in self.areas.iter().enumerate() {
             if let Some(handle) = pane_map.get(pane_id) {
                 let is_focused = self.focused == Some(*pane_id);
                 let border_style = if is_focused {
@@ -558,13 +578,71 @@ impl Widget for CockpitWidget<'_> {
                     .focus_style(self.focus_style);
 
                 widget.render(*pane_area, buf);
+
+                // Show number as centered content (rendered after pane, so visible initially)
+                if self.show_numbers {
+                    let inner = Block::default().borders(Borders::ALL).inner(*pane_area);
+                    let number = format!("{}", idx + 1);
+                    let paragraph = Paragraph::new(number)
+                        .alignment(Alignment::Center)
+                        .style(Style::default().fg(Color::DarkGray));
+                    let centered_area = Rect {
+                        x: inner.x,
+                        y: inner.y + inner.height / 2,
+                        width: inner.width,
+                        height: 1,
+                    };
+                    paragraph.render(centered_area, buf);
+                }
+            }
+        }
+
+        // Render empty pane areas
+        for (panel_number, empty_area) in self.empty_pane_areas {
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .border_style(self.unfocus_style);
+            let inner = block.inner(*empty_area);
+            block.render(*empty_area, buf);
+
+            // Show number as centered content
+            if self.show_numbers {
+                let number = format!("{}", panel_number);
+                let paragraph = Paragraph::new(number)
+                    .alignment(Alignment::Center)
+                    .style(Style::default().fg(Color::DarkGray));
+                let centered_area = Rect {
+                    x: inner.x,
+                    y: inner.y + inner.height / 2,
+                    width: inner.width,
+                    height: 1,
+                };
+                paragraph.render(centered_area, buf);
             }
         }
 
         // Render sub-panels
-        for sub_area in self.sub_panel_areas {
-            let widget = SubPanelWidget::new().border_style(self.unfocus_style);
-            widget.render(*sub_area, buf);
+        for (idx, sub_area) in self.sub_panel_areas.iter().enumerate() {
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .border_style(self.unfocus_style);
+            let inner = block.inner(*sub_area);
+            block.render(*sub_area, buf);
+
+            // Show number as centered content
+            if self.show_numbers {
+                let number = format!("{}", idx + 5);
+                let paragraph = Paragraph::new(number)
+                    .alignment(Alignment::Center)
+                    .style(Style::default().fg(Color::DarkGray));
+                let centered_area = Rect {
+                    x: inner.x,
+                    y: inner.y + inner.height / 2,
+                    width: inner.width,
+                    height: 1,
+                };
+                paragraph.render(centered_area, buf);
+            }
         }
     }
 }

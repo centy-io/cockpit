@@ -80,6 +80,8 @@ pub struct PaneManager {
     sub_panel_areas: Vec<Rect>,
     /// Ratio of space for panes vs sub-panels (0.7 = 70% panes, 30% sub-panels).
     sub_panel_ratio: f32,
+    /// Empty pane areas for slots without active PTYs (panel_number, Rect).
+    empty_pane_areas: Vec<(usize, Rect)>,
 }
 
 impl PaneManager {
@@ -112,6 +114,7 @@ impl PaneManager {
             pane_order: Vec::with_capacity(4),
             sub_panel_areas: Vec::new(),
             sub_panel_ratio: 0.7,
+            empty_pane_areas: Vec::new(),
         }
     }
 
@@ -252,7 +255,14 @@ impl PaneManager {
         &self.sub_panel_areas
     }
 
+    /// Get empty pane areas for rendering (slots without active PTYs).
+    #[must_use]
+    pub fn get_empty_pane_areas(&self) -> &[(usize, Rect)] {
+        &self.empty_pane_areas
+    }
+
     /// Recalculate layout based on current panes and terminal size.
+    /// Always calculates 4 pane areas (2x2 grid) for consistent 12-panel layout.
     fn recalculate_layout(&mut self) {
         let Some(full_area) = self.terminal_size else {
             return;
@@ -278,70 +288,96 @@ impl PaneManager {
             height: panes_height,
         };
 
-        match self.pane_order.len() {
-            0 => {
-                self.layout = None;
-                self.cached_areas.clear();
-            }
-            1 => {
-                let pane_id = self.pane_order[0];
-                self.layout = Some(Layout::single(pane_id));
-                self.cached_areas.clear();
-                self.cached_areas.insert(pane_id, panes_area);
-            }
-            2 => {
-                let pane1 = self.pane_order[0];
-                let pane2 = self.pane_order[1];
-                self.layout = Some(Layout::vsplit_equal(
-                    Layout::single(pane1),
-                    Layout::single(pane2),
-                ));
-                if let Some(layout) = &self.layout {
-                    self.cached_areas = LayoutCalculator::calculate_areas(layout, panes_area);
-                }
-            }
-            3 => {
-                // 3 panes: first pane takes left half, remaining two share right half
-                let pane1 = self.pane_order[0];
-                let pane2 = self.pane_order[1];
-                let pane3 = self.pane_order[2];
-                self.layout = Some(Layout::vsplit_equal(
-                    Layout::single(pane1),
-                    Layout::vsplit_equal(Layout::single(pane2), Layout::single(pane3)),
-                ));
-                if let Some(layout) = &self.layout {
-                    self.cached_areas = LayoutCalculator::calculate_areas(layout, panes_area);
-                }
-            }
-            4 => {
-                // 4 panes: 2 groups of 2 (left group: pane1, pane2; right group: pane3, pane4)
-                let pane1 = self.pane_order[0];
-                let pane2 = self.pane_order[1];
-                let pane3 = self.pane_order[2];
-                let pane4 = self.pane_order[3];
-                let left_group = Layout::vsplit_equal(Layout::single(pane1), Layout::single(pane2));
-                let right_group =
-                    Layout::vsplit_equal(Layout::single(pane3), Layout::single(pane4));
-                self.layout = Some(Layout::vsplit_equal(left_group, right_group));
-                if let Some(layout) = &self.layout {
-                    self.cached_areas = LayoutCalculator::calculate_areas(layout, panes_area);
-                }
-            }
-            _ => {
-                // Should never happen due to max_panes = 4
+        // Always calculate 4 areas in a horizontal row (side by side)
+        let quarter_width = panes_area.width / 4;
+
+        // Calculate all 4 pane slot areas (positions 1-4, left to right)
+        let all_areas = [
+            // Position 1: leftmost
+            Rect {
+                x: panes_area.x,
+                y: panes_area.y,
+                width: quarter_width,
+                height: panes_area.height,
+            },
+            // Position 2: second from left
+            Rect {
+                x: panes_area.x + quarter_width,
+                y: panes_area.y,
+                width: quarter_width,
+                height: panes_area.height,
+            },
+            // Position 3: third from left
+            Rect {
+                x: panes_area.x + quarter_width * 2,
+                y: panes_area.y,
+                width: quarter_width,
+                height: panes_area.height,
+            },
+            // Position 4: rightmost (takes remaining width to handle rounding)
+            Rect {
+                x: panes_area.x + quarter_width * 3,
+                y: panes_area.y,
+                width: panes_area.width - quarter_width * 3,
+                height: panes_area.height,
+            },
+        ];
+
+        // Clear and recalculate
+        self.cached_areas.clear();
+        self.empty_pane_areas.clear();
+
+        // Assign active panes to positions, track empty slots
+        for (i, area) in all_areas.iter().enumerate() {
+            if i < self.pane_order.len() {
+                let pane_id = self.pane_order[i];
+                self.cached_areas.insert(pane_id, *area);
+            } else {
+                // Empty slot - store panel number (1-indexed)
+                self.empty_pane_areas.push((i + 1, *area));
             }
         }
+
+        // Update layout for active panes only (for internal use)
+        // All panes are arranged horizontally (side by side)
+        self.layout = match self.pane_order.len() {
+            0 => None,
+            1 => Some(Layout::single(self.pane_order[0])),
+            2 => Some(Layout::hsplit_equal(
+                Layout::single(self.pane_order[0]),
+                Layout::single(self.pane_order[1]),
+            )),
+            3 => Some(Layout::hsplit_equal(
+                Layout::single(self.pane_order[0]),
+                Layout::hsplit_equal(
+                    Layout::single(self.pane_order[1]),
+                    Layout::single(self.pane_order[2]),
+                ),
+            )),
+            4 => {
+                // 4 panes in a horizontal row
+                let left_half = Layout::hsplit_equal(
+                    Layout::single(self.pane_order[0]),
+                    Layout::single(self.pane_order[1]),
+                );
+                let right_half = Layout::hsplit_equal(
+                    Layout::single(self.pane_order[2]),
+                    Layout::single(self.pane_order[3]),
+                );
+                Some(Layout::hsplit_equal(left_half, right_half))
+            }
+            _ => None,
+        };
     }
 
     /// Recalculate sub-panel areas.
     ///
-    /// Creates 2 sub-panels below each pane (8 sub-panels total for 4 panes).
+    /// Always creates 8 sub-panels for consistent 12-panel layout.
     fn recalculate_sub_panels(&mut self, area: Rect) {
         self.sub_panel_areas.clear();
 
-        let pane_count = self.pane_order.len().max(1);
-        // 2 sub-panels per pane
-        let total_panels = pane_count * 2;
+        // Always 8 sub-panels (numbered 5-12)
+        let total_panels = 8;
         let panel_width = area.width / (total_panels as u16);
 
         for i in 0..total_panels {

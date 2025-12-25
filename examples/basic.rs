@@ -79,11 +79,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
 
     manager.set_terminal_size(panes_area);
 
-    // Spawn four panes - layout is automatic (2 groups of 2)!
-    manager.spawn(SpawnConfig::new_shell())?;
-    manager.spawn(SpawnConfig::new_shell())?;
-    manager.spawn(SpawnConfig::new_shell())?;
-    manager.spawn(SpawnConfig::new_shell())?;
+    // No panes spawned - all 12 panels will be empty with numbers displayed
+    // To spawn terminal panes, uncomment below:
+    // manager.spawn(SpawnConfig::new_shell())?;
+    // manager.spawn(SpawnConfig::new_shell())?;
+    // manager.spawn(SpawnConfig::new_shell())?;
+    // manager.spawn(SpawnConfig::new_shell())?;
 
     // Dialog state for exit confirmation
     let mut dialog_state = DialogState::new();
@@ -128,10 +129,13 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
                 .filter_map(|id| manager.get_pane(*id).map(|h| (*id, h)))
                 .collect();
 
-            // Render the cockpit widget with sub-panels
+            // Render the cockpit widget with sub-panels and empty pane placeholders
             let sub_panels = manager.get_sub_panel_areas();
-            let widget =
-                CockpitWidget::new(&panes, &areas_vec, manager.focused()).sub_panels(sub_panels);
+            let empty_panes = manager.get_empty_pane_areas();
+            let widget = CockpitWidget::new(&panes, &areas_vec, manager.focused())
+                .sub_panels(sub_panels)
+                .empty_panes(empty_panes)
+                .show_numbers(true);
             frame.render_widget(widget, panes_area);
 
             // Render exit confirmation dialog if visible

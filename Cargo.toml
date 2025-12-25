@@ -35,6 +35,11 @@ crossterm = { version = "0.28", features = ["event-stream"] }
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 
+[dev-dependencies.cargo-husky]
+version = "1"
+default-features = false
+features = ["user-hooks"]
+
 [lints.rust]
 unsafe_code = "forbid"
 

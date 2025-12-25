@@ -1,0 +1,3 @@
+#!/bin/bash
+# Pre-commit hook: enforce 100-line file limit on staged files
+./scripts/check-file-size.sh

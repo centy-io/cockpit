@@ -85,3 +85,14 @@ jobs:
 
       - name: Build
         run: cargo build --release --all-features
+
+  file-size:
+    name: File Size Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check file sizes
+        run: chmod +x ./scripts/check-file-size.sh && ./scripts/check-file-size.sh

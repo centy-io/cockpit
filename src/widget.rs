@@ -583,9 +583,14 @@ impl Widget for CockpitWidget<'_> {
                     self.unfocus_style
                 };
 
-                let block = Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(border_style);
+                // First pane gets all borders, others skip LEFT to avoid double borders
+                let borders = if idx == 0 {
+                    Borders::ALL
+                } else {
+                    Borders::TOP | Borders::BOTTOM | Borders::RIGHT
+                };
+
+                let block = Block::default().borders(borders).border_style(border_style);
 
                 let widget = PaneWidget::new(handle)
                     .focused(is_focused)
@@ -596,7 +601,7 @@ impl Widget for CockpitWidget<'_> {
 
                 // Show PID or label as centered content
                 if self.show_numbers {
-                    let inner = Block::default().borders(Borders::ALL).inner(*pane_area);
+                    let inner = Block::default().borders(borders).inner(*pane_area);
                     let label = PANE_LABELS.get(idx).unwrap_or(&"");
                     let display_text = match self.pane_pids.get(label) {
                         Some(pid) => format!("{}", pid),
@@ -618,8 +623,15 @@ impl Widget for CockpitWidget<'_> {
 
         // Render empty pane areas
         for (pane_number, empty_area) in self.empty_pane_areas {
+            // First pane gets all borders, others skip LEFT to avoid double borders
+            let borders = if *pane_number == 1 {
+                Borders::ALL
+            } else {
+                Borders::TOP | Borders::BOTTOM | Borders::RIGHT
+            };
+
             let block = Block::default()
-                .borders(Borders::ALL)
+                .borders(borders)
                 .border_style(self.unfocus_style);
             let inner = block.inner(*empty_area);
             block.render(*empty_area, buf);
@@ -647,8 +659,16 @@ impl Widget for CockpitWidget<'_> {
 
         // Render sub-panes
         for (idx, sub_area) in self.sub_pane_areas.iter().enumerate() {
+            // First sub-pane: LEFT + BOTTOM + RIGHT (no TOP to avoid double border with panes above)
+            // Others: BOTTOM + RIGHT only (no LEFT, no TOP)
+            let borders = if idx == 0 {
+                Borders::LEFT | Borders::BOTTOM | Borders::RIGHT
+            } else {
+                Borders::BOTTOM | Borders::RIGHT
+            };
+
             let block = Block::default()
-                .borders(Borders::ALL)
+                .borders(borders)
                 .border_style(self.unfocus_style);
             let inner = block.inner(*sub_area);
             block.render(*sub_area, buf);

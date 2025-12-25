@@ -492,8 +492,10 @@ pub struct CockpitWidget<'a> {
     sub_panel_areas: &'a [Rect],
     /// Empty pane areas (panel_number, Rect) for slots without active PTYs.
     empty_pane_areas: &'a [(usize, Rect)],
-    /// Whether to show panel numbers (1-12) in borders.
+    /// Whether to show panel labels/PIDs.
     show_numbers: bool,
+    /// Process IDs mapped by panel label (e.g., "110" -> 12345).
+    panel_pids: std::collections::HashMap<&'static str, u32>,
 }
 
 impl<'a> CockpitWidget<'a> {
@@ -513,6 +515,7 @@ impl<'a> CockpitWidget<'a> {
             sub_panel_areas: &[],
             empty_pane_areas: &[],
             show_numbers: false,
+            panel_pids: std::collections::HashMap::new(),
         }
     }
 
@@ -544,10 +547,18 @@ impl<'a> CockpitWidget<'a> {
         self
     }
 
-    /// Enable panel numbering (1-12) in borders.
+    /// Enable panel numbering in borders.
     #[must_use]
     pub fn show_numbers(mut self, show: bool) -> Self {
         self.show_numbers = show;
+        self
+    }
+
+    /// Set process ID for a panel by its label (e.g., "110", "121", "212").
+    /// Valid labels: 110, 120, 210, 220, 111, 112, 121, 122, 211, 212, 221, 222
+    #[must_use]
+    pub fn panel_pid(mut self, label: &'static str, pid: u32) -> Self {
+        self.panel_pids.insert(label, pid);
         self
     }
 }
@@ -583,11 +594,15 @@ impl Widget for CockpitWidget<'_> {
 
                 widget.render(*pane_area, buf);
 
-                // Show label as centered content
+                // Show PID or label as centered content
                 if self.show_numbers {
                     let inner = Block::default().borders(Borders::ALL).inner(*pane_area);
                     let label = PANE_LABELS.get(idx).unwrap_or(&"");
-                    let paragraph = Paragraph::new(*label)
+                    let display_text = match self.panel_pids.get(label) {
+                        Some(pid) => format!("{}", pid),
+                        None => label.to_string(),
+                    };
+                    let paragraph = Paragraph::new(display_text)
                         .alignment(Alignment::Center)
                         .style(Style::default().fg(Color::DarkGray));
                     let centered_area = Rect {
@@ -609,10 +624,15 @@ impl Widget for CockpitWidget<'_> {
             let inner = block.inner(*empty_area);
             block.render(*empty_area, buf);
 
-            // Show label as centered content
+            // Show PID or label as centered content
             if self.show_numbers {
-                let label = PANE_LABELS.get(panel_number - 1).unwrap_or(&"");
-                let paragraph = Paragraph::new(*label)
+                let idx = panel_number - 1;
+                let label = PANE_LABELS.get(idx).unwrap_or(&"");
+                let display_text = match self.panel_pids.get(label) {
+                    Some(pid) => format!("{}", pid),
+                    None => label.to_string(),
+                };
+                let paragraph = Paragraph::new(display_text)
                     .alignment(Alignment::Center)
                     .style(Style::default().fg(Color::DarkGray));
                 let centered_area = Rect {
@@ -633,10 +653,14 @@ impl Widget for CockpitWidget<'_> {
             let inner = block.inner(*sub_area);
             block.render(*sub_area, buf);
 
-            // Show label as centered content
+            // Show PID or label as centered content
             if self.show_numbers {
                 let label = SUB_PANEL_LABELS.get(idx).unwrap_or(&"");
-                let paragraph = Paragraph::new(*label)
+                let display_text = match self.panel_pids.get(label) {
+                    Some(pid) => format!("{}", pid),
+                    None => label.to_string(),
+                };
+                let paragraph = Paragraph::new(display_text)
                     .alignment(Alignment::Center)
                     .style(Style::default().fg(Color::DarkGray));
                 let centered_area = Rect {

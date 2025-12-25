@@ -29,7 +29,7 @@ pub struct ManagerConfig {
 impl Default for ManagerConfig {
     fn default() -> Self {
         Self {
-            max_panes: 2,
+            max_panes: 4,
             scrollback_lines: 10_000,
         }
     }
@@ -76,6 +76,10 @@ pub struct PaneManager {
     cached_areas: HashMap<PaneId, Rect>,
     /// Order of panes for consistent layout (first = left, second = right).
     pane_order: Vec<PaneId>,
+    /// Sub-panel areas (non-PTY decorative panels).
+    sub_panel_areas: Vec<Rect>,
+    /// Ratio of space for panes vs sub-panels (0.7 = 70% panes, 30% sub-panels).
+    sub_panel_ratio: f32,
 }
 
 impl PaneManager {
@@ -89,9 +93,9 @@ impl PaneManager {
     #[must_use]
     pub fn with_config(config: ManagerConfig) -> Self {
         let (event_tx, event_rx) = mpsc::channel(256);
-        // Enforce max_panes = 2
+        // Enforce max_panes = 4
         let config = ManagerConfig {
-            max_panes: config.max_panes.min(2),
+            max_panes: config.max_panes.min(4),
             ..config
         };
         Self {
@@ -105,7 +109,9 @@ impl PaneManager {
             plugin_registry: None,
             terminal_size: None,
             cached_areas: HashMap::new(),
-            pane_order: Vec::with_capacity(2),
+            pane_order: Vec::with_capacity(4),
+            sub_panel_areas: Vec::new(),
+            sub_panel_ratio: 0.7,
         }
     }
 
@@ -240,10 +246,37 @@ impl PaneManager {
         &self.cached_areas
     }
 
+    /// Get sub-panel areas for rendering.
+    #[must_use]
+    pub fn get_sub_panel_areas(&self) -> &[Rect] {
+        &self.sub_panel_areas
+    }
+
     /// Recalculate layout based on current panes and terminal size.
     fn recalculate_layout(&mut self) {
-        let Some(area) = self.terminal_size else {
+        let Some(full_area) = self.terminal_size else {
             return;
+        };
+
+        // Split the area into panes (top) and sub-panels (bottom)
+        let panes_height =
+            (f32::from(full_area.height) * self.sub_panel_ratio).round() as u16;
+        let sub_panels_height = full_area.height.saturating_sub(panes_height);
+
+        // Calculate sub-panel areas
+        let sub_panels_area = Rect {
+            x: full_area.x,
+            y: full_area.y + panes_height,
+            width: full_area.width,
+            height: sub_panels_height,
+        };
+        self.recalculate_sub_panels(sub_panels_area);
+
+        let panes_area = Rect {
+            x: full_area.x,
+            y: full_area.y,
+            width: full_area.width,
+            height: panes_height,
         };
 
         match self.pane_order.len() {
@@ -255,7 +288,7 @@ impl PaneManager {
                 let pane_id = self.pane_order[0];
                 self.layout = Some(Layout::single(pane_id));
                 self.cached_areas.clear();
-                self.cached_areas.insert(pane_id, area);
+                self.cached_areas.insert(pane_id, panes_area);
             }
             2 => {
                 let pane1 = self.pane_order[0];
@@ -265,12 +298,73 @@ impl PaneManager {
                     Layout::single(pane2),
                 ));
                 if let Some(layout) = &self.layout {
-                    self.cached_areas = LayoutCalculator::calculate_areas(layout, area);
+                    self.cached_areas = LayoutCalculator::calculate_areas(layout, panes_area);
+                }
+            }
+            3 => {
+                // 3 panes: first pane takes left half, remaining two share right half
+                let pane1 = self.pane_order[0];
+                let pane2 = self.pane_order[1];
+                let pane3 = self.pane_order[2];
+                self.layout = Some(Layout::vsplit_equal(
+                    Layout::single(pane1),
+                    Layout::vsplit_equal(Layout::single(pane2), Layout::single(pane3)),
+                ));
+                if let Some(layout) = &self.layout {
+                    self.cached_areas = LayoutCalculator::calculate_areas(layout, panes_area);
+                }
+            }
+            4 => {
+                // 4 panes: 2 groups of 2 (left group: pane1, pane2; right group: pane3, pane4)
+                let pane1 = self.pane_order[0];
+                let pane2 = self.pane_order[1];
+                let pane3 = self.pane_order[2];
+                let pane4 = self.pane_order[3];
+                let left_group = Layout::vsplit_equal(
+                    Layout::single(pane1),
+                    Layout::single(pane2),
+                );
+                let right_group = Layout::vsplit_equal(
+                    Layout::single(pane3),
+                    Layout::single(pane4),
+                );
+                self.layout = Some(Layout::vsplit_equal(left_group, right_group));
+                if let Some(layout) = &self.layout {
+                    self.cached_areas = LayoutCalculator::calculate_areas(layout, panes_area);
                 }
             }
             _ => {
-                // Should never happen due to max_panes = 2
+                // Should never happen due to max_panes = 4
             }
+        }
+    }
+
+    /// Recalculate sub-panel areas.
+    ///
+    /// Creates 2 sub-panels below each pane (8 sub-panels total for 4 panes).
+    fn recalculate_sub_panels(&mut self, area: Rect) {
+        self.sub_panel_areas.clear();
+
+        let pane_count = self.pane_order.len().max(1);
+        // 2 sub-panels per pane
+        let total_panels = pane_count * 2;
+        let panel_width = area.width / (total_panels as u16);
+
+        for i in 0..total_panels {
+            let x = area.x + (i as u16 * panel_width);
+            // Handle last panel width to account for rounding
+            let width = if i == total_panels - 1 {
+                area.width - (i as u16 * panel_width)
+            } else {
+                panel_width
+            };
+
+            self.sub_panel_areas.push(Rect {
+                x,
+                y: area.y,
+                width,
+                height: area.height,
+            });
         }
     }
 
@@ -291,14 +385,17 @@ impl PaneManager {
 
     /// Calculate initial pane size for spawning.
     fn calculate_initial_pane_size(&self) -> PaneSize {
-        if let Some(area) = self.terminal_size {
+        if let Some(mut area) = self.terminal_size {
+            // Reduce available height for sub-panels
+            area.height = (f32::from(area.height) * self.sub_panel_ratio).round() as u16;
+
             // Estimate size based on how many panes will exist
             let future_pane_count = self.panes.len() + 1;
-            let (width, height) = if future_pane_count == 1 {
-                (area.width.saturating_sub(2), area.height.saturating_sub(2))
-            } else {
-                // 2 panes: split horizontally
-                (area.width / 2 - 1, area.height.saturating_sub(2))
+            let (width, height) = match future_pane_count {
+                1 => (area.width.saturating_sub(2), area.height.saturating_sub(2)),
+                2 => (area.width / 2 - 1, area.height.saturating_sub(2)),
+                3 | 4 => (area.width / 4 - 1, area.height.saturating_sub(2)),
+                _ => (area.width / 4 - 1, area.height.saturating_sub(2)),
             };
             PaneSize::new(height, width)
         } else {

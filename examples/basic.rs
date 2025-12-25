@@ -8,6 +8,10 @@
 //! - Ctrl+N: Focus next pane
 //! - Mouse click: Focus pane under cursor
 //! - All other input goes to the focused pane
+//!
+//! Layout:
+//! - 4 PTY panes on top (2 groups of 2)
+//! - 8 empty sub-panels below (2 per pane)
 
 use std::io::{self, stdout};
 use std::time::{Duration, Instant};
@@ -72,9 +76,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
         width: term_size.width,
         height: term_size.height.saturating_sub(STATUS_BAR_HEIGHT),
     };
+
     manager.set_terminal_size(panes_area);
 
-    // Spawn two panes - layout is automatic (side by side)!
+    // Spawn four panes - layout is automatic (2 groups of 2)!
+    manager.spawn(SpawnConfig::new_shell())?;
+    manager.spawn(SpawnConfig::new_shell())?;
     manager.spawn(SpawnConfig::new_shell())?;
     manager.spawn(SpawnConfig::new_shell())?;
 
@@ -121,8 +128,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
                 .filter_map(|id| manager.get_pane(*id).map(|h| (*id, h)))
                 .collect();
 
-            // Render the cockpit widget
-            let widget = CockpitWidget::new(&panes, &areas_vec, manager.focused());
+            // Render the cockpit widget with sub-panels
+            let sub_panels = manager.get_sub_panel_areas();
+            let widget = CockpitWidget::new(&panes, &areas_vec, manager.focused())
+                .sub_panels(sub_panels);
             frame.render_widget(widget, panes_area);
 
             // Render exit confirmation dialog if visible

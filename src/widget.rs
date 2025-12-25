@@ -427,6 +427,59 @@ impl Widget for PaneWidget<'_> {
     }
 }
 
+/// Widget for rendering an empty bordered sub-panel.
+pub struct SubPanelWidget<'a> {
+    /// Optional title for the border.
+    title: Option<&'a str>,
+    /// Border style.
+    border_style: Style,
+}
+
+impl<'a> SubPanelWidget<'a> {
+    /// Create a new sub-panel widget.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            title: None,
+            border_style: Style::default().fg(Color::DarkGray),
+        }
+    }
+
+    /// Set the title.
+    #[must_use]
+    pub fn title(mut self, title: &'a str) -> Self {
+        self.title = Some(title);
+        self
+    }
+
+    /// Set the border style.
+    #[must_use]
+    pub fn border_style(mut self, style: Style) -> Self {
+        self.border_style = style;
+        self
+    }
+}
+
+impl Default for SubPanelWidget<'_> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Widget for SubPanelWidget<'_> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let mut block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(self.border_style);
+
+        if let Some(title) = self.title {
+            block = block.title(title);
+        }
+
+        block.render(area, buf);
+    }
+}
+
 /// Widget for rendering the entire multiplexer.
 pub struct CockpitWidget<'a> {
     /// Pane handles by ID.
@@ -439,6 +492,8 @@ pub struct CockpitWidget<'a> {
     focus_style: Style,
     /// Style for unfocused pane borders.
     unfocus_style: Style,
+    /// Sub-panel areas for rendering.
+    sub_panel_areas: &'a [Rect],
 }
 
 impl<'a> CockpitWidget<'a> {
@@ -455,6 +510,7 @@ impl<'a> CockpitWidget<'a> {
             focused,
             focus_style: Style::default().fg(Color::Cyan),
             unfocus_style: Style::default().fg(Color::DarkGray),
+            sub_panel_areas: &[],
         }
     }
 
@@ -469,6 +525,13 @@ impl<'a> CockpitWidget<'a> {
     #[must_use]
     pub fn unfocus_style(mut self, style: Style) -> Self {
         self.unfocus_style = style;
+        self
+    }
+
+    /// Set sub-panel areas to render.
+    #[must_use]
+    pub fn sub_panels(mut self, areas: &'a [Rect]) -> Self {
+        self.sub_panel_areas = areas;
         self
     }
 }
@@ -501,6 +564,15 @@ impl Widget for CockpitWidget<'_> {
 
                 widget.render(*pane_area, buf);
             }
+        }
+
+        // Render sub-panels
+        for (idx, sub_area) in self.sub_panel_areas.iter().enumerate() {
+            let title = format!("Panel {}", idx + 1);
+            let widget = SubPanelWidget::new()
+                .title(&title)
+                .border_style(self.unfocus_style);
+            widget.render(*sub_area, buf);
         }
     }
 }

@@ -10,7 +10,7 @@
 //!
 //! - **PTY Management**: Spawn processes in pseudo-terminals using `portable-pty`
 //! - **Terminal Emulation**: Full VT100/ANSI terminal emulation via `vt100`
-//! - **Automatic Layout**: Side-by-side pane arrangement (max 2 panes)
+//! - **Automatic Layout**: Side-by-side pane arrangement (max 4 panes)
 //! - **Crash Isolation**: Each process runs independently
 //! - **Ratatui Integration**: Widgets for rendering panes
 //!
@@ -65,4 +65,6 @@ pub use plugins::{
 };
 pub use pty::PaneEvent;
 pub use status_bar::{StatusBarConfig, StatusBarSegment, StatusBarWidget, STATUS_BAR_HEIGHT};
-pub use widget::{CockpitWidget, ConfirmDialog, DialogButton, DialogState, PaneWidget};
+pub use widget::{
+    CockpitWidget, ConfirmDialog, DialogButton, DialogState, PaneWidget, SubPanelWidget,
+};

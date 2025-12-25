@@ -1,6 +1,6 @@
 [package]
 name = "cockpit"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Terminal multiplexer library for Ratatui applications"
 license = "MIT OR Apache-2.0"

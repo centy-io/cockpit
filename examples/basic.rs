@@ -130,8 +130,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
 
             // Render the cockpit widget with sub-panels
             let sub_panels = manager.get_sub_panel_areas();
-            let widget = CockpitWidget::new(&panes, &areas_vec, manager.focused())
-                .sub_panels(sub_panels);
+            let widget =
+                CockpitWidget::new(&panes, &areas_vec, manager.focused()).sub_panels(sub_panels);
             frame.render_widget(widget, panes_area);
 
             // Render exit confirmation dialog if visible

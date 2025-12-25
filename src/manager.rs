@@ -259,8 +259,7 @@ impl PaneManager {
         };
 
         // Split the area into panes (top) and sub-panels (bottom)
-        let panes_height =
-            (f32::from(full_area.height) * self.sub_panel_ratio).round() as u16;
+        let panes_height = (f32::from(full_area.height) * self.sub_panel_ratio).round() as u16;
         let sub_panels_height = full_area.height.saturating_sub(panes_height);
 
         // Calculate sub-panel areas
@@ -320,14 +319,9 @@ impl PaneManager {
                 let pane2 = self.pane_order[1];
                 let pane3 = self.pane_order[2];
                 let pane4 = self.pane_order[3];
-                let left_group = Layout::vsplit_equal(
-                    Layout::single(pane1),
-                    Layout::single(pane2),
-                );
-                let right_group = Layout::vsplit_equal(
-                    Layout::single(pane3),
-                    Layout::single(pane4),
-                );
+                let left_group = Layout::vsplit_equal(Layout::single(pane1), Layout::single(pane2));
+                let right_group =
+                    Layout::vsplit_equal(Layout::single(pane3), Layout::single(pane4));
                 self.layout = Some(Layout::vsplit_equal(left_group, right_group));
                 if let Some(layout) = &self.layout {
                     self.cached_areas = LayoutCalculator::calculate_areas(layout, panes_area);

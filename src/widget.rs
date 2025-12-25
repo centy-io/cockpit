@@ -695,6 +695,45 @@ impl Widget for CockpitWidget<'_> {
                 };
                 paragraph.render(centered_area, buf);
             }
+
+            // Render down arrows for overlay navigation in lower corners
+            // 111 (idx 0): bottom-left, 122 (idx 3): bottom-right
+            // 211 (idx 4): bottom-left, 222 (idx 7): bottom-right
+            let arrow_style = Style::default().fg(Color::White);
+            let arrow_y = sub_area.y + sub_area.height - 2; // One row above bottom border
+
+            match idx {
+                0 | 4 => {
+                    // Bottom-left corner on 111 and 211
+                    let arrow_x = sub_area.x + 1; // One column inside left border
+                    if arrow_x + 2 < buf.area.x + buf.area.width
+                        && arrow_y < buf.area.y + buf.area.height
+                    {
+                        // Render "▼▼▼" for bigger arrow
+                        for i in 0..3 {
+                            let cell = &mut buf[(arrow_x + i, arrow_y)];
+                            cell.set_char('▼');
+                            cell.set_style(arrow_style);
+                        }
+                    }
+                }
+                3 | 7 => {
+                    // Bottom-right corner on 122 and 222
+                    let arrow_x = sub_area.x + sub_area.width - 4; // Three columns inside right border
+                    if arrow_x >= buf.area.x
+                        && arrow_x + 2 < buf.area.x + buf.area.width
+                        && arrow_y < buf.area.y + buf.area.height
+                    {
+                        // Render "▼▼▼" for bigger arrow
+                        for i in 0..3 {
+                            let cell = &mut buf[(arrow_x + i, arrow_y)];
+                            cell.set_char('▼');
+                            cell.set_style(arrow_style);
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
     }
 }

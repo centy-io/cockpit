@@ -204,6 +204,16 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
                     // Route all other input to focused pane
                     manager.route_key(key).await?;
                 }
+                Event::Resize(width, height) => {
+                    // Recalculate layout on terminal resize
+                    let panes_area = Rect {
+                        x: 0,
+                        y: STATUS_BAR_HEIGHT,
+                        width,
+                        height: height.saturating_sub(STATUS_BAR_HEIGHT),
+                    };
+                    manager.set_terminal_size(panes_area);
+                }
                 Event::Mouse(mouse) => {
                     // If dialog is visible, handle mouse for dialog
                     if dialog_state.visible {

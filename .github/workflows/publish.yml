@@ -33,11 +33,16 @@ jobs:
           LOCAL_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
           echo "local=$LOCAL_VERSION" >> $GITHUB_OUTPUT
 
-          # Get published version from crates.io
-          REMOTE_VERSION=$(curl -s "https://crates.io/api/v1/crates/cockpit" | jq -r '.crate.max_version // "0.0.0"')
+          # Get published version from crates.io (check if this exact version exists)
+          CRATE_INFO=$(curl -s "https://crates.io/api/v1/crates/cockpit")
+          REMOTE_VERSION=$(echo "$CRATE_INFO" | jq -r '.crate.max_version // "0.0.0"')
+          VERSION_EXISTS=$(echo "$CRATE_INFO" | jq -r --arg v "$LOCAL_VERSION" '.versions[]? | select(.num == $v) | .num // empty')
           echo "remote=$REMOTE_VERSION" >> $GITHUB_OUTPUT
 
-          if [ "$LOCAL_VERSION" != "$REMOTE_VERSION" ]; then
+          if [ -n "$VERSION_EXISTS" ]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "Version $LOCAL_VERSION already published, skipping"
+          elif [ "$LOCAL_VERSION" != "$REMOTE_VERSION" ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
             echo "Version changed: $REMOTE_VERSION -> $LOCAL_VERSION"
           else
@@ -47,6 +52,16 @@ jobs:
 
       - name: Publish to crates.io
         if: steps.version.outputs.changed == 'true'
-        run: cargo publish
+        run: |
+          OUTPUT=$(cargo publish 2>&1) || {
+            # If it failed because version already exists, that's okay
+            if echo "$OUTPUT" | grep -q "already exists"; then
+              echo "Version already published, skipping"
+              exit 0
+            fi
+            echo "$OUTPUT"
+            exit 1
+          }
+          echo "$OUTPUT"
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

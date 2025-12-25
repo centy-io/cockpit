@@ -583,12 +583,12 @@ impl Widget for CockpitWidget<'_> {
                     self.unfocus_style
                 };
 
-                // First pane: TOP + LEFT + RIGHT (no BOTTOM to avoid double border with sub-panes)
-                // Others: TOP + RIGHT only (no LEFT, no BOTTOM)
+                // First pane: ALL borders
+                // Others: TOP + BOTTOM + RIGHT (no LEFT to avoid double border)
                 let borders = if idx == 0 {
-                    Borders::TOP | Borders::LEFT | Borders::RIGHT
+                    Borders::ALL
                 } else {
-                    Borders::TOP | Borders::RIGHT
+                    Borders::TOP | Borders::BOTTOM | Borders::RIGHT
                 };
 
                 let block = Block::default().borders(borders).border_style(border_style);
@@ -624,12 +624,12 @@ impl Widget for CockpitWidget<'_> {
 
         // Render empty pane areas
         for (pane_number, empty_area) in self.empty_pane_areas {
-            // First pane: TOP + LEFT + RIGHT (no BOTTOM to avoid double border with sub-panes)
-            // Others: TOP + RIGHT only (no LEFT, no BOTTOM)
+            // First pane: ALL borders
+            // Others: TOP + BOTTOM + RIGHT (no LEFT to avoid double border)
             let borders = if *pane_number == 1 {
-                Borders::TOP | Borders::LEFT | Borders::RIGHT
+                Borders::ALL
             } else {
-                Borders::TOP | Borders::RIGHT
+                Borders::TOP | Borders::BOTTOM | Borders::RIGHT
             };
 
             let block = Block::default()
@@ -661,12 +661,12 @@ impl Widget for CockpitWidget<'_> {
 
         // Render sub-panes
         for (idx, sub_area) in self.sub_pane_areas.iter().enumerate() {
-            // First sub-pane: ALL borders
-            // Others: TOP + BOTTOM + RIGHT (no LEFT to avoid double border)
+            // First sub-pane: LEFT + BOTTOM + RIGHT (no TOP - upper panes have BOTTOM)
+            // Others: BOTTOM + RIGHT only (no LEFT, no TOP)
             let borders = if idx == 0 {
-                Borders::ALL
+                Borders::LEFT | Borders::BOTTOM | Borders::RIGHT
             } else {
-                Borders::TOP | Borders::BOTTOM | Borders::RIGHT
+                Borders::BOTTOM | Borders::RIGHT
             };
 
             let block = Block::default()

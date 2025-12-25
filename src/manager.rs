@@ -272,12 +272,12 @@ impl PaneManager {
         let panes_height = (f32::from(full_area.height) * self.sub_pane_ratio).round() as u16;
         let sub_panes_height = full_area.height.saturating_sub(panes_height);
 
-        // Calculate sub-pane areas
+        // Calculate sub-pane areas - overlap by 1 row so borders share the same line
         let sub_panes_area = Rect {
             x: full_area.x,
-            y: full_area.y + panes_height,
+            y: full_area.y + panes_height.saturating_sub(1),
             width: full_area.width,
-            height: sub_panes_height,
+            height: sub_panes_height + 1,
         };
         self.recalculate_sub_panes(sub_panes_area);
 

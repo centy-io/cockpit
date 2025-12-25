@@ -564,11 +564,8 @@ impl Widget for CockpitWidget<'_> {
         }
 
         // Render sub-panels
-        for (idx, sub_area) in self.sub_panel_areas.iter().enumerate() {
-            let title = format!("Panel {}", idx + 1);
-            let widget = SubPanelWidget::new()
-                .title(&title)
-                .border_style(self.unfocus_style);
+        for sub_area in self.sub_panel_areas {
+            let widget = SubPanelWidget::new().border_style(self.unfocus_style);
             widget.render(*sub_area, buf);
         }
     }

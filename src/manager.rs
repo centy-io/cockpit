@@ -16,6 +16,7 @@ use crate::pane::{PaneHandle, PaneId, PaneSize, SpawnConfig};
 use crate::plugins::{Plugin, PluginId, PluginRegistry, PluginResult};
 use crate::pty::{self, PaneEvent, SpawnedPty};
 use crate::status_bar::StatusBarSegment;
+use crate::widget::arrow_at_position;
 
 /// Configuration for the pane manager.
 #[derive(Clone, Debug)]
@@ -82,6 +83,8 @@ pub struct PaneManager {
     sub_pane_ratio: f32,
     /// Empty pane areas for slots without active PTYs (pane_number, Rect).
     empty_pane_areas: Vec<(usize, Rect)>,
+    /// Which pane positions (0-3) are expanded (hiding their sub-panes).
+    expanded_positions: [bool; 4],
 }
 
 impl PaneManager {
@@ -115,6 +118,7 @@ impl PaneManager {
             sub_pane_areas: Vec::new(),
             sub_pane_ratio: 0.7,
             empty_pane_areas: Vec::new(),
+            expanded_positions: [false; 4],
         }
     }
 
@@ -261,6 +265,22 @@ impl PaneManager {
         &self.empty_pane_areas
     }
 
+    /// Get which pane positions are expanded.
+    #[must_use]
+    pub fn get_expanded_positions(&self) -> &[bool; 4] {
+        &self.expanded_positions
+    }
+
+    /// Toggle expansion state for a pane position (0-3).
+    /// When expanded, the pane takes full height and its sub-panes are hidden.
+    pub fn toggle_pane_expansion(&mut self, position: usize) {
+        if position < 4 {
+            self.expanded_positions[position] = !self.expanded_positions[position];
+            self.recalculate_layout();
+            let _ = self.resize_all_panes();
+        }
+    }
+
     /// Recalculate layout based on current panes and terminal size.
     /// Always calculates 4 pane areas (2x2 grid) for consistent 12-pane layout.
     fn recalculate_layout(&mut self) {
@@ -281,45 +301,55 @@ impl PaneManager {
         };
         self.recalculate_sub_panes(sub_panes_area);
 
-        let panes_area = Rect {
-            x: full_area.x,
-            y: full_area.y,
-            width: full_area.width,
-            height: panes_height,
-        };
-
         // Always calculate 4 areas in a horizontal row (side by side)
-        let quarter_width = panes_area.width / 4;
+        let quarter_width = full_area.width / 4;
 
         // Calculate all 4 pane slot areas (positions 1-4, left to right)
-        let all_areas = [
-            // Position 1: leftmost
+        // Expanded panes get full height, others get panes_height
+        let all_areas: [Rect; 4] = [
+            // Position 0: leftmost
             Rect {
-                x: panes_area.x,
-                y: panes_area.y,
+                x: full_area.x,
+                y: full_area.y,
                 width: quarter_width,
-                height: panes_area.height,
+                height: if self.expanded_positions[0] {
+                    full_area.height
+                } else {
+                    panes_height
+                },
             },
-            // Position 2: second from left
+            // Position 1: second from left
             Rect {
-                x: panes_area.x + quarter_width,
-                y: panes_area.y,
+                x: full_area.x + quarter_width,
+                y: full_area.y,
                 width: quarter_width,
-                height: panes_area.height,
+                height: if self.expanded_positions[1] {
+                    full_area.height
+                } else {
+                    panes_height
+                },
             },
-            // Position 3: third from left
+            // Position 2: third from left
             Rect {
-                x: panes_area.x + quarter_width * 2,
-                y: panes_area.y,
+                x: full_area.x + quarter_width * 2,
+                y: full_area.y,
                 width: quarter_width,
-                height: panes_area.height,
+                height: if self.expanded_positions[2] {
+                    full_area.height
+                } else {
+                    panes_height
+                },
             },
-            // Position 4: rightmost (takes remaining width to handle rounding)
+            // Position 3: rightmost (takes remaining width to handle rounding)
             Rect {
-                x: panes_area.x + quarter_width * 3,
-                y: panes_area.y,
-                width: panes_area.width - quarter_width * 3,
-                height: panes_area.height,
+                x: full_area.x + quarter_width * 3,
+                y: full_area.y,
+                width: full_area.width - quarter_width * 3,
+                height: if self.expanded_positions[3] {
+                    full_area.height
+                } else {
+                    panes_height
+                },
             },
         ];
 
@@ -372,19 +402,28 @@ impl PaneManager {
 
     /// Recalculate sub-pane areas.
     ///
-    /// Always creates 8 sub-panes for consistent 12-pane layout.
+    /// Creates sub-panes for non-expanded positions only.
     fn recalculate_sub_panes(&mut self, area: Rect) {
         self.sub_pane_areas.clear();
 
-        // Always 8 sub-panes (numbered 5-12)
-        let total_panes = 8;
-        let pane_width = area.width / (total_panes as u16);
+        // 8 sub-pane slots total (2 per pane position)
+        // Sub-pane indices: 0-1 for position 0, 2-3 for position 1, 4-5 for position 2, 6-7 for position 3
+        let pane_width = area.width / 8;
 
-        for i in 0..total_panes {
+        for i in 0..8 {
+            let position = i / 2; // Which pane position (0-3) this sub-pane belongs to
+
+            // Skip sub-panes for expanded positions
+            if self.expanded_positions[position] {
+                // Push empty rect as placeholder to maintain indices
+                self.sub_pane_areas.push(Rect::default());
+                continue;
+            }
+
             let x = area.x + (i as u16 * pane_width);
             // Handle last pane width to account for rounding
-            let width = if i == total_panes - 1 {
-                area.width - (i as u16 * pane_width)
+            let width = if i == 7 {
+                area.width - (7 * pane_width)
             } else {
                 pane_width
             };
@@ -551,6 +590,25 @@ impl PaneManager {
             }
         }
         false
+    }
+
+    /// Handle a mouse click at the given screen coordinates.
+    ///
+    /// This is the unified click handler that:
+    /// 1. First checks if clicking a navigation arrow → toggles pane expansion
+    /// 2. Otherwise checks if clicking a pane → changes focus
+    ///
+    /// Returns `true` if any action was taken (expansion toggled or focus changed).
+    pub fn handle_click(&mut self, x: u16, y: u16) -> bool {
+        // First check for arrow clicks (expansion toggle)
+        if let Some(arrow) = arrow_at_position(x, y, &self.sub_pane_areas) {
+            self.toggle_pane_expansion(arrow.pane_position());
+            return true;
+        }
+
+        // Otherwise handle pane focus
+        let areas = self.cached_areas.clone();
+        self.focus_at_position(x, y, &areas)
     }
 
     /// Convert the manager into a shared reference.

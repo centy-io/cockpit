@@ -24,6 +24,20 @@ pub enum ArrowPosition {
     Pane222,
 }
 
+impl ArrowPosition {
+    /// Get the pane position index (0-3) that this arrow controls.
+    /// Used for toggling pane expansion.
+    #[must_use]
+    pub fn pane_position(self) -> usize {
+        match self {
+            Self::Pane111 => 0, // Controls pane 110 (position 0)
+            Self::Pane122 => 1, // Controls pane 120 (position 1)
+            Self::Pane211 => 2, // Controls pane 210 (position 2)
+            Self::Pane222 => 3, // Controls pane 220 (position 3)
+        }
+    }
+}
+
 /// Arrow dimensions for hit detection.
 const ARROW_WIDTH: u16 = 5;
 const ARROW_HEIGHT: u16 = 3;
@@ -42,6 +56,11 @@ pub fn arrow_at_position(x: u16, y: u16, sub_pane_areas: &[Rect]) -> Option<Arro
 
     for (idx, position, is_left) in arrow_configs {
         if let Some(sub_area) = sub_pane_areas.get(idx) {
+            // Skip empty sub-panes (expanded positions)
+            if sub_area.width == 0 || sub_area.height == 0 {
+                continue;
+            }
+
             let base_y = sub_area.y + sub_area.height.saturating_sub(1 + ARROW_HEIGHT);
             let base_x = if is_left {
                 sub_area.x + 1
@@ -714,11 +733,20 @@ impl Widget for CockpitWidget<'_> {
 
         // Render sub-panes
         for (idx, sub_area) in self.sub_pane_areas.iter().enumerate() {
-            // First sub-pane: ALL borders
-            // Others: TOP + BOTTOM + RIGHT (no LEFT to avoid double vertical border)
-            // Note: Both upper panes (BOTTOM) and sub-panes (TOP) have horizontal border
-            // to ensure vertical borders connect properly on both sides
-            let borders = if idx == 0 {
+            // Skip empty sub-panes (expanded positions have empty rects)
+            if sub_area.width == 0 || sub_area.height == 0 {
+                continue;
+            }
+
+            // First visible sub-pane gets LEFT border, others don't
+            // Find if this is the first non-empty sub-pane
+            let is_first_visible = self
+                .sub_pane_areas
+                .iter()
+                .take(idx)
+                .all(|r| r.width == 0 || r.height == 0);
+
+            let borders = if is_first_visible {
                 Borders::ALL
             } else {
                 Borders::TOP | Borders::BOTTOM | Borders::RIGHT

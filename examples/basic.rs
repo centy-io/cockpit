@@ -19,8 +19,8 @@ use std::io::{self, stdout};
 use std::time::{Duration, Instant};
 
 use cockpit::{
-    arrow_at_position, ArrowPosition, CockpitWidget, ConfirmDialog, DialogState, GitUserPlugin,
-    PaneManager, SpawnConfig, StatusBarWidget, STATUS_BAR_HEIGHT,
+    CockpitWidget, ConfirmDialog, DialogState, GitUserPlugin, PaneManager, SpawnConfig,
+    StatusBarWidget, STATUS_BAR_HEIGHT,
 };
 use crossterm::{
     event::{
@@ -230,33 +230,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
                         continue;
                     }
 
-                    // Handle mouse click
+                    // Handle mouse click (arrows + focus) - managed by the lib
                     if matches!(mouse.kind, MouseEventKind::Down(_)) {
-                        // Check for arrow clicks first
-                        let sub_panes = manager.get_sub_pane_areas();
-                        if let Some(arrow) = arrow_at_position(mouse.column, mouse.row, sub_panes) {
-                            // Handle arrow click - for now just log it
-                            // In the future this will change the overlay
-                            match arrow {
-                                ArrowPosition::Pane111 => {
-                                    // TODO: Change overlay for pane 110
-                                }
-                                ArrowPosition::Pane122 => {
-                                    // TODO: Change overlay for pane 120
-                                }
-                                ArrowPosition::Pane211 => {
-                                    // TODO: Change overlay for pane 210
-                                }
-                                ArrowPosition::Pane222 => {
-                                    // TODO: Change overlay for pane 220
-                                }
-                            }
-                            continue;
-                        }
-
-                        // Handle mouse click to switch focus
-                        let areas = manager.get_areas().clone();
-                        manager.focus_at_position(mouse.column, mouse.row, &areas);
+                        manager.handle_click(mouse.column, mouse.row);
                     }
                 }
                 _ => {}

@@ -228,10 +228,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
                         continue;
                     }
 
-                    // Handle mouse click to switch focus
+                    // Handle mouse click (arrows + focus) - managed by the lib
                     if matches!(mouse.kind, MouseEventKind::Down(_)) {
-                        let areas = manager.get_areas().clone();
-                        manager.focus_at_position(mouse.column, mouse.row, &areas);
+                        manager.handle_click(mouse.column, mouse.row);
                     }
                 }
                 _ => {}

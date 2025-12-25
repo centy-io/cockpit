@@ -76,11 +76,11 @@ pub struct PaneManager {
     cached_areas: HashMap<PaneId, Rect>,
     /// Order of panes for consistent layout (first = left, second = right).
     pane_order: Vec<PaneId>,
-    /// Sub-panel areas (non-PTY decorative panels).
-    sub_panel_areas: Vec<Rect>,
-    /// Ratio of space for panes vs sub-panels (0.7 = 70% panes, 30% sub-panels).
-    sub_panel_ratio: f32,
-    /// Empty pane areas for slots without active PTYs (panel_number, Rect).
+    /// Sub-pane areas (non-PTY decorative panes).
+    sub_pane_areas: Vec<Rect>,
+    /// Ratio of space for panes vs sub-panes (0.7 = 70% panes, 30% sub-panes).
+    sub_pane_ratio: f32,
+    /// Empty pane areas for slots without active PTYs (pane_number, Rect).
     empty_pane_areas: Vec<(usize, Rect)>,
 }
 
@@ -112,8 +112,8 @@ impl PaneManager {
             terminal_size: None,
             cached_areas: HashMap::new(),
             pane_order: Vec::with_capacity(4),
-            sub_panel_areas: Vec::new(),
-            sub_panel_ratio: 0.7,
+            sub_pane_areas: Vec::new(),
+            sub_pane_ratio: 0.7,
             empty_pane_areas: Vec::new(),
         }
     }
@@ -249,10 +249,10 @@ impl PaneManager {
         &self.cached_areas
     }
 
-    /// Get sub-panel areas for rendering.
+    /// Get sub-pane areas for rendering.
     #[must_use]
-    pub fn get_sub_panel_areas(&self) -> &[Rect] {
-        &self.sub_panel_areas
+    pub fn get_sub_pane_areas(&self) -> &[Rect] {
+        &self.sub_pane_areas
     }
 
     /// Get empty pane areas for rendering (slots without active PTYs).
@@ -262,24 +262,24 @@ impl PaneManager {
     }
 
     /// Recalculate layout based on current panes and terminal size.
-    /// Always calculates 4 pane areas (2x2 grid) for consistent 12-panel layout.
+    /// Always calculates 4 pane areas (2x2 grid) for consistent 12-pane layout.
     fn recalculate_layout(&mut self) {
         let Some(full_area) = self.terminal_size else {
             return;
         };
 
-        // Split the area into panes (top) and sub-panels (bottom)
-        let panes_height = (f32::from(full_area.height) * self.sub_panel_ratio).round() as u16;
-        let sub_panels_height = full_area.height.saturating_sub(panes_height);
+        // Split the area into panes (top) and sub-panes (bottom)
+        let panes_height = (f32::from(full_area.height) * self.sub_pane_ratio).round() as u16;
+        let sub_panes_height = full_area.height.saturating_sub(panes_height);
 
-        // Calculate sub-panel areas
-        let sub_panels_area = Rect {
+        // Calculate sub-pane areas
+        let sub_panes_area = Rect {
             x: full_area.x,
             y: full_area.y + panes_height,
             width: full_area.width,
-            height: sub_panels_height,
+            height: sub_panes_height,
         };
-        self.recalculate_sub_panels(sub_panels_area);
+        self.recalculate_sub_panes(sub_panes_area);
 
         let panes_area = Rect {
             x: full_area.x,
@@ -333,7 +333,7 @@ impl PaneManager {
                 let pane_id = self.pane_order[i];
                 self.cached_areas.insert(pane_id, *area);
             } else {
-                // Empty slot - store panel number (1-indexed)
+                // Empty slot - store pane number (1-indexed)
                 self.empty_pane_areas.push((i + 1, *area));
             }
         }
@@ -370,26 +370,26 @@ impl PaneManager {
         };
     }
 
-    /// Recalculate sub-panel areas.
+    /// Recalculate sub-pane areas.
     ///
-    /// Always creates 8 sub-panels for consistent 12-panel layout.
-    fn recalculate_sub_panels(&mut self, area: Rect) {
-        self.sub_panel_areas.clear();
+    /// Always creates 8 sub-panes for consistent 12-pane layout.
+    fn recalculate_sub_panes(&mut self, area: Rect) {
+        self.sub_pane_areas.clear();
 
-        // Always 8 sub-panels (numbered 5-12)
-        let total_panels = 8;
-        let panel_width = area.width / (total_panels as u16);
+        // Always 8 sub-panes (numbered 5-12)
+        let total_panes = 8;
+        let pane_width = area.width / (total_panes as u16);
 
-        for i in 0..total_panels {
-            let x = area.x + (i as u16 * panel_width);
-            // Handle last panel width to account for rounding
-            let width = if i == total_panels - 1 {
-                area.width - (i as u16 * panel_width)
+        for i in 0..total_panes {
+            let x = area.x + (i as u16 * pane_width);
+            // Handle last pane width to account for rounding
+            let width = if i == total_panes - 1 {
+                area.width - (i as u16 * pane_width)
             } else {
-                panel_width
+                pane_width
             };
 
-            self.sub_panel_areas.push(Rect {
+            self.sub_pane_areas.push(Rect {
                 x,
                 y: area.y,
                 width,
@@ -416,8 +416,8 @@ impl PaneManager {
     /// Calculate initial pane size for spawning.
     fn calculate_initial_pane_size(&self) -> PaneSize {
         if let Some(mut area) = self.terminal_size {
-            // Reduce available height for sub-panels
-            area.height = (f32::from(area.height) * self.sub_panel_ratio).round() as u16;
+            // Reduce available height for sub-panes
+            area.height = (f32::from(area.height) * self.sub_pane_ratio).round() as u16;
 
             // Estimate size based on how many panes will exist
             let future_pane_count = self.panes.len() + 1;

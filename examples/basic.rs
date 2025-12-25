@@ -2,7 +2,7 @@
 //!
 //! Run with: cargo run --example basic
 //!
-//! Spawns 4 bash terminals in the upper panels.
+//! Spawns 4 bash terminals in the upper panes.
 //!
 //! Controls:
 //! - Ctrl+C (twice): Open exit confirmation dialog
@@ -13,7 +13,7 @@
 //!
 //! Layout:
 //! - 4 PTY panes on top
-//! - 8 sub-panels below
+//! - 8 sub-panes below
 
 use std::io::{self, stdout};
 use std::time::{Duration, Instant};
@@ -131,10 +131,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
                 .collect();
 
             // Build the widget
-            let sub_panels = manager.get_sub_panel_areas();
+            let sub_panes = manager.get_sub_pane_areas();
             let empty_panes = manager.get_empty_pane_areas();
             let widget = CockpitWidget::new(&panes, &areas_vec, manager.focused())
-                .sub_panels(sub_panels)
+                .sub_panes(sub_panes)
                 .empty_panes(empty_panes);
 
             frame.render_widget(widget, panes_area);

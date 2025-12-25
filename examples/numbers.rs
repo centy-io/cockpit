@@ -1,8 +1,8 @@
-//! Numbers example - displays panel numbers without spawning terminals.
+//! Numbers example - displays pane numbers without spawning terminals.
 //!
 //! Run with: cargo run --example numbers
 //!
-//! Shows all 12 panels with their labels (110, 120, 210, 220, 111-222).
+//! Shows all 12 panes with their labels (110, 120, 210, 220, 111-222).
 //! No terminal panes are spawned.
 //!
 //! Controls:
@@ -10,7 +10,7 @@
 //!
 //! Layout:
 //! - 4 empty panes on top (110, 120, 210, 220)
-//! - 8 sub-panels below (111, 112, 121, 122, 211, 212, 221, 222)
+//! - 8 sub-panes below (111, 112, 121, 122, 211, 212, 221, 222)
 
 use std::io::{self, stdout};
 use std::time::{Duration, Instant};
@@ -78,7 +78,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
 
     manager.set_terminal_size(panes_area);
 
-    // No panes spawned - all 12 panels will be empty with numbers displayed
+    // No panes spawned - all 12 panes will be empty with numbers displayed
     // To spawn terminal panes, uncomment below:
     // manager.spawn(SpawnConfig::new_shell())?;
     // manager.spawn(SpawnConfig::new_shell())?;
@@ -128,11 +128,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> cockp
                 .filter_map(|id| manager.get_pane(*id).map(|h| (*id, h)))
                 .collect();
 
-            // Render the cockpit widget with sub-panels and empty pane placeholders
-            let sub_panels = manager.get_sub_panel_areas();
+            // Render the cockpit widget with sub-panes and empty pane placeholders
+            let sub_panes = manager.get_sub_pane_areas();
             let empty_panes = manager.get_empty_pane_areas();
             let widget = CockpitWidget::new(&panes, &areas_vec, manager.focused())
-                .sub_panels(sub_panels)
+                .sub_panes(sub_panes)
                 .empty_panes(empty_panes)
                 .show_numbers(true);
             frame.render_widget(widget, panes_area);

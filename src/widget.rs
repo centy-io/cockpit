@@ -423,16 +423,16 @@ impl Widget for PaneWidget<'_> {
     }
 }
 
-/// Widget for rendering an empty bordered sub-panel.
-pub struct SubPanelWidget<'a> {
+/// Widget for rendering an empty bordered sub-pane.
+pub struct SubPaneWidget<'a> {
     /// Optional title for the border.
     title: Option<&'a str>,
     /// Border style.
     border_style: Style,
 }
 
-impl<'a> SubPanelWidget<'a> {
-    /// Create a new sub-panel widget.
+impl<'a> SubPaneWidget<'a> {
+    /// Create a new sub-pane widget.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -456,13 +456,13 @@ impl<'a> SubPanelWidget<'a> {
     }
 }
 
-impl Default for SubPanelWidget<'_> {
+impl Default for SubPaneWidget<'_> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Widget for SubPanelWidget<'_> {
+impl Widget for SubPaneWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let mut block = Block::default()
             .borders(Borders::ALL)
@@ -488,14 +488,14 @@ pub struct CockpitWidget<'a> {
     focus_style: Style,
     /// Style for unfocused pane borders.
     unfocus_style: Style,
-    /// Sub-panel areas for rendering.
-    sub_panel_areas: &'a [Rect],
-    /// Empty pane areas (panel_number, Rect) for slots without active PTYs.
+    /// Sub-pane areas for rendering.
+    sub_pane_areas: &'a [Rect],
+    /// Empty pane areas (pane_number, Rect) for slots without active PTYs.
     empty_pane_areas: &'a [(usize, Rect)],
-    /// Whether to show panel labels/PIDs.
+    /// Whether to show pane labels/PIDs.
     show_numbers: bool,
-    /// Process IDs mapped by panel label (e.g., "110" -> 12345).
-    panel_pids: std::collections::HashMap<&'static str, u32>,
+    /// Process IDs mapped by pane label (e.g., "110" -> 12345).
+    pane_pids: std::collections::HashMap<&'static str, u32>,
 }
 
 impl<'a> CockpitWidget<'a> {
@@ -512,10 +512,10 @@ impl<'a> CockpitWidget<'a> {
             focused,
             focus_style: Style::default().fg(Color::Cyan),
             unfocus_style: Style::default().fg(Color::DarkGray),
-            sub_panel_areas: &[],
+            sub_pane_areas: &[],
             empty_pane_areas: &[],
             show_numbers: false,
-            panel_pids: std::collections::HashMap::new(),
+            pane_pids: std::collections::HashMap::new(),
         }
     }
 
@@ -533,10 +533,10 @@ impl<'a> CockpitWidget<'a> {
         self
     }
 
-    /// Set sub-panel areas to render.
+    /// Set sub-pane areas to render.
     #[must_use]
-    pub fn sub_panels(mut self, areas: &'a [Rect]) -> Self {
-        self.sub_panel_areas = areas;
+    pub fn sub_panes(mut self, areas: &'a [Rect]) -> Self {
+        self.sub_pane_areas = areas;
         self
     }
 
@@ -547,28 +547,27 @@ impl<'a> CockpitWidget<'a> {
         self
     }
 
-    /// Enable panel numbering in borders.
+    /// Enable pane numbering in borders.
     #[must_use]
     pub fn show_numbers(mut self, show: bool) -> Self {
         self.show_numbers = show;
         self
     }
 
-    /// Set process ID for a panel by its label (e.g., "110", "121", "212").
+    /// Set process ID for a pane by its label (e.g., "110", "121", "212").
     /// Valid labels: 110, 120, 210, 220, 111, 112, 121, 122, 211, 212, 221, 222
     #[must_use]
-    pub fn panel_pid(mut self, label: &'static str, pid: u32) -> Self {
-        self.panel_pids.insert(label, pid);
+    pub fn pane_pid(mut self, label: &'static str, pid: u32) -> Self {
+        self.pane_pids.insert(label, pid);
         self
     }
 }
 
 impl Widget for CockpitWidget<'_> {
     fn render(self, _area: Rect, buf: &mut Buffer) {
-        // Panel labels: positions 1-4 (panes) and 5-12 (sub-panels)
+        // Pane labels: positions 1-4 (panes) and 5-12 (sub-panes)
         const PANE_LABELS: [&str; 4] = ["110", "120", "210", "220"];
-        const SUB_PANEL_LABELS: [&str; 8] =
-            ["111", "112", "121", "122", "211", "212", "221", "222"];
+        const SUB_PANE_LABELS: [&str; 8] = ["111", "112", "121", "122", "211", "212", "221", "222"];
 
         // Create a lookup for pane handles
         let pane_map: std::collections::HashMap<_, _> =
@@ -599,7 +598,7 @@ impl Widget for CockpitWidget<'_> {
                 if self.show_numbers {
                     let inner = Block::default().borders(Borders::ALL).inner(*pane_area);
                     let label = PANE_LABELS.get(idx).unwrap_or(&"");
-                    let display_text = match self.panel_pids.get(label) {
+                    let display_text = match self.pane_pids.get(label) {
                         Some(pid) => format!("{}", pid),
                         None => label.to_string(),
                     };
@@ -618,7 +617,7 @@ impl Widget for CockpitWidget<'_> {
         }
 
         // Render empty pane areas
-        for (panel_number, empty_area) in self.empty_pane_areas {
+        for (pane_number, empty_area) in self.empty_pane_areas {
             let block = Block::default()
                 .borders(Borders::ALL)
                 .border_style(self.unfocus_style);
@@ -627,9 +626,9 @@ impl Widget for CockpitWidget<'_> {
 
             // Show PID or label as centered content
             if self.show_numbers {
-                let idx = panel_number - 1;
+                let idx = pane_number - 1;
                 let label = PANE_LABELS.get(idx).unwrap_or(&"");
-                let display_text = match self.panel_pids.get(label) {
+                let display_text = match self.pane_pids.get(label) {
                     Some(pid) => format!("{}", pid),
                     None => label.to_string(),
                 };
@@ -646,8 +645,8 @@ impl Widget for CockpitWidget<'_> {
             }
         }
 
-        // Render sub-panels
-        for (idx, sub_area) in self.sub_panel_areas.iter().enumerate() {
+        // Render sub-panes
+        for (idx, sub_area) in self.sub_pane_areas.iter().enumerate() {
             let block = Block::default()
                 .borders(Borders::ALL)
                 .border_style(self.unfocus_style);
@@ -656,8 +655,8 @@ impl Widget for CockpitWidget<'_> {
 
             // Show PID or label as centered content
             if self.show_numbers {
-                let label = SUB_PANEL_LABELS.get(idx).unwrap_or(&"");
-                let display_text = match self.panel_pids.get(label) {
+                let label = SUB_PANE_LABELS.get(idx).unwrap_or(&"");
+                let display_text = match self.pane_pids.get(label) {
                     Some(pid) => format!("{}", pid),
                     None => label.to_string(),
                 };

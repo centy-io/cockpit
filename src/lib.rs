@@ -66,5 +66,6 @@ pub use plugins::{
 pub use pty::PaneEvent;
 pub use status_bar::{StatusBarConfig, StatusBarSegment, StatusBarWidget, STATUS_BAR_HEIGHT};
 pub use widget::{
-    CockpitWidget, ConfirmDialog, DialogButton, DialogState, PaneWidget, SubPaneWidget,
+    arrow_at_position, ArrowPosition, CockpitWidget, ConfirmDialog, DialogButton, DialogState,
+    PaneWidget, SubPaneWidget,
 };

@@ -10,6 +10,59 @@ use ratatui::{
 
 use crate::pane::{PaneHandle, PaneId, ScreenColor};
 
+/// Arrow positions for overlay navigation.
+/// These correspond to clickable arrows in the sub-panes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArrowPosition {
+    /// Bottom-left arrow in sub-pane 111 (under pane 110)
+    Pane111,
+    /// Bottom-right arrow in sub-pane 122 (under pane 120)
+    Pane122,
+    /// Bottom-left arrow in sub-pane 211 (under pane 210)
+    Pane211,
+    /// Bottom-right arrow in sub-pane 222 (under pane 220)
+    Pane222,
+}
+
+/// Arrow dimensions for hit detection.
+const ARROW_WIDTH: u16 = 5;
+const ARROW_HEIGHT: u16 = 3;
+
+/// Check if a click at (x, y) hits any of the navigation arrows.
+/// Returns the arrow position if clicked, None otherwise.
+#[must_use]
+pub fn arrow_at_position(x: u16, y: u16, sub_pane_areas: &[Rect]) -> Option<ArrowPosition> {
+    // Arrow indices: 111=0, 122=3, 211=4, 222=7
+    let arrow_configs: [(usize, ArrowPosition, bool); 4] = [
+        (0, ArrowPosition::Pane111, true),  // idx 0, left-aligned
+        (3, ArrowPosition::Pane122, false), // idx 3, right-aligned
+        (4, ArrowPosition::Pane211, true),  // idx 4, left-aligned
+        (7, ArrowPosition::Pane222, false), // idx 7, right-aligned
+    ];
+
+    for (idx, position, is_left) in arrow_configs {
+        if let Some(sub_area) = sub_pane_areas.get(idx) {
+            let base_y = sub_area.y + sub_area.height.saturating_sub(1 + ARROW_HEIGHT);
+            let base_x = if is_left {
+                sub_area.x + 1
+            } else {
+                sub_area.x + sub_area.width.saturating_sub(1 + ARROW_WIDTH)
+            };
+
+            // Check if click is within arrow bounds
+            if x >= base_x
+                && x < base_x + ARROW_WIDTH
+                && y >= base_y
+                && y < base_y + ARROW_HEIGHT
+            {
+                return Some(position);
+            }
+        }
+    }
+
+    None
+}
+
 /// Which button is selected in a confirm dialog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DialogButton {
@@ -696,39 +749,65 @@ impl Widget for CockpitWidget<'_> {
                 paragraph.render(centered_area, buf);
             }
 
-            // Render down arrows for overlay navigation in lower corners
+            // Render big ASCII art down arrows for overlay navigation in lower corners
             // 111 (idx 0): bottom-left, 122 (idx 3): bottom-right
             // 211 (idx 4): bottom-left, 222 (idx 7): bottom-right
+            //
+            // Arrow design (5 wide x 3 tall):
+            //   ╲   ╱
+            //    ╲ ╱
+            //     V
             let arrow_style = Style::default().fg(Color::White);
-            let arrow_y = sub_area.y + sub_area.height - 2; // One row above bottom border
+            let arrow_lines: [&[char]; 3] = [
+                &['╲', ' ', ' ', ' ', '╱'],
+                &[' ', '╲', ' ', '╱', ' '],
+                &[' ', ' ', 'V', ' ', ' '],
+            ];
+            let arrow_width = 5;
+            let arrow_height = 3;
+
+            let base_y = sub_area.y + sub_area.height - 1 - arrow_height; // Position above bottom border
 
             match idx {
                 0 | 4 => {
                     // Bottom-left corner on 111 and 211
-                    let arrow_x = sub_area.x + 1; // One column inside left border
-                    if arrow_x + 2 < buf.area.x + buf.area.width
-                        && arrow_y < buf.area.y + buf.area.height
-                    {
-                        // Render "▼▼▼" for bigger arrow
-                        for i in 0..3 {
-                            let cell = &mut buf[(arrow_x + i, arrow_y)];
-                            cell.set_char('▼');
-                            cell.set_style(arrow_style);
+                    let base_x = sub_area.x + 1; // One column inside left border
+                    for (row, line) in arrow_lines.iter().enumerate() {
+                        let y = base_y + row as u16;
+                        if y >= buf.area.y + buf.area.height {
+                            continue;
+                        }
+                        for (col, &ch) in line.iter().enumerate() {
+                            let x = base_x + col as u16;
+                            if x >= buf.area.x + buf.area.width {
+                                continue;
+                            }
+                            if ch != ' ' {
+                                let cell = &mut buf[(x, y)];
+                                cell.set_char(ch);
+                                cell.set_style(arrow_style);
+                            }
                         }
                     }
                 }
                 3 | 7 => {
                     // Bottom-right corner on 122 and 222
-                    let arrow_x = sub_area.x + sub_area.width - 4; // Three columns inside right border
-                    if arrow_x >= buf.area.x
-                        && arrow_x + 2 < buf.area.x + buf.area.width
-                        && arrow_y < buf.area.y + buf.area.height
-                    {
-                        // Render "▼▼▼" for bigger arrow
-                        for i in 0..3 {
-                            let cell = &mut buf[(arrow_x + i, arrow_y)];
-                            cell.set_char('▼');
-                            cell.set_style(arrow_style);
+                    let base_x = sub_area.x + sub_area.width - 1 - arrow_width; // Inside right border
+                    for (row, line) in arrow_lines.iter().enumerate() {
+                        let y = base_y + row as u16;
+                        if y >= buf.area.y + buf.area.height {
+                            continue;
+                        }
+                        for (col, &ch) in line.iter().enumerate() {
+                            let x = base_x + col as u16;
+                            if x < buf.area.x || x >= buf.area.x + buf.area.width {
+                                continue;
+                            }
+                            if ch != ' ' {
+                                let cell = &mut buf[(x, y)];
+                                cell.set_char(ch);
+                                cell.set_style(arrow_style);
+                            }
                         }
                     }
                 }
